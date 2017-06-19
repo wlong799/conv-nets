@@ -1,23 +1,27 @@
 # coding=utf-8
 """
-Runs model for training the neural network on the cpu. Creates the training
+Runs model for training the neural network on the CPU. Creates the training
 step and runs it.
 """
+import tensorflow as tf
+import cifar10
 
 
-# TODO: Add constants?
-
-def train(total_loss):
-    """ Builds an optimizer to update parameters of model.
-
-    Args:
-        total_loss: Total loss of model.
-    Returns:
-        train_op: Op for training model.
-    """
-    # TODO: Write function
+def train():
+    """ Builds an optimizer to update parameters of model."""
+    with tf.device('/cpu:0'):
+        image_batch, label_batch = cifar10.data_reader.get_input_batch(
+            'data', 256)
+    logits = cifar10.model.inference(image_batch)
+    total_loss = cifar10.model.loss(logits, label_batch)
+    opt = tf.train.GradientDescentOptimizer(0.001)
+    train_op = opt.minimize(total_loss)
+    with tf.train.MonitoredTrainingSession(
+            hooks=[tf.train.StopAtStepHook(last_step=1000),
+                   tf.train.NanTensorHook(total_loss)]) as mon_sess:
+        while not mon_sess.should_stop():
+            mon_sess.run(train_op)
 
 
 if __name__ == '__main__':
-    pass
-# TODO: Add argparse and run
+    train()
