@@ -4,16 +4,16 @@ Runs model for training the neural network on the CPU. Creates the training
 step and runs it.
 """
 import tensorflow as tf
-import cifar10
+import cnn
 
 
 def train():
     """ Builds an optimizer to update parameters of model."""
     with tf.device('/cpu:0'):
-        image_batch, label_batch = cifar10.data_reader.get_input_batch(
+        image_batch, label_batch = cnn.data_reader.get_input_batch(
             'data', 256)
-    logits = cifar10.model.inference(image_batch)
-    total_loss = cifar10.model.loss(logits, label_batch)
+    logits = cnn.model.inference(image_batch)
+    total_loss = cnn.model.loss(logits, label_batch)
     opt = tf.train.GradientDescentOptimizer(0.001)
     train_op = opt.minimize(total_loss)
     with tf.train.MonitoredTrainingSession(
