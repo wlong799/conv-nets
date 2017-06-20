@@ -10,7 +10,7 @@ import cnn
 def train():
     """ Builds an optimizer to update parameters of model."""
     with tf.device('/cpu:0'):
-        image_batch, label_batch = cnn.data_reader.get_input_batch(
+        image_batch, label_batch = cnn.data_reader.get_minibatch(
             'data', 256)
     logits = cnn.inference.inference(image_batch)
     total_loss = cnn.inference.loss(logits, label_batch)

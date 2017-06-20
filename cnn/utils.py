@@ -50,8 +50,7 @@ def download_dataset(download_urls, dest_dir, verbose=True):
 
 
 def create_cifar10_datasets(dest_dir):
-    """Creates a TFRecords file for the training and test CIFAR-10 datasets
-    from the binaries located online."""
+    """Creates a TFRecords file for both the CIFAR-10 train and test data."""
     data_url = 'http://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz'
     train_data_names = [os.path.join(dest_dir, filename) for filename in
                         ['data_batch_{}.bin'.format(i) for i in range(1, 6)]]
@@ -78,10 +77,13 @@ def create_cifar10_datasets(dest_dir):
 def create_cifar10_record_from_binaries(record_filename, data_filenames):
     """Parses the specified binaries and writes the contained examples into
     a single TFRecords file with the given filename.
+
+    The CIFAR-10 binary format is described here:
+    http://www.cs.toronto.edu/~kriz/cifar.html
     """
     label_bytes = 1
-    image_width, image_height, image_depth = 32, 32, 3
-    image_bytes = image_width * image_height * image_depth
+    image_width, image_height, image_channels = 32, 32, 3
+    image_bytes = image_width * image_height * image_channels
     example_format = '{}B{}s'.format(label_bytes, image_bytes)
 
     record_writer = tf.python_io.TFRecordWriter(record_filename)
@@ -94,11 +96,11 @@ def create_cifar10_record_from_binaries(record_filename, data_filenames):
                     value=[image_height])),
                 'width': tf.train.Feature(int64_list=tf.train.Int64List(
                     value=[image_width])),
-                'depth': tf.train.Feature(int64_list=tf.train.Int64List(
-                    value=[image_depth])),
+                'channels': tf.train.Feature(int64_list=tf.train.Int64List(
+                    value=[image_channels])),
                 'label': tf.train.Feature(int64_list=tf.train.Int64List(
                     value=[label])),
-                'image': tf.train.Feature(bytes_list=tf.train.BytesList(
+                'raw_image': tf.train.Feature(bytes_list=tf.train.BytesList(
                     value=[raw_image]))
             }))
             record_writer.write(example.SerializeToString())
