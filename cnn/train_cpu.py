@@ -12,8 +12,8 @@ def train():
     with tf.device('/cpu:0'):
         image_batch, label_batch = cnn.data_reader.get_input_batch(
             'data', 256)
-    logits = cnn.model.inference(image_batch)
-    total_loss = cnn.model.loss(logits, label_batch)
+    logits = cnn.inference.inference(image_batch)
+    total_loss = cnn.inference.loss(logits, label_batch)
     opt = tf.train.GradientDescentOptimizer(0.001)
     train_op = opt.minimize(total_loss)
     with tf.train.MonitoredTrainingSession(
