@@ -89,35 +89,7 @@ def get_input_batch(data_dir, batch_size, use_eval_data=False):
     return image_batch, label_batch
 
 
-def download_and_extract_binaries(data_dir):
-    """Downloads and extracts CIFAR-10 binaries, if not already present.
 
-    Args:
-        data_dir: Path to CIFAR-10 data directory.
-    """
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
-    tar_filename = DATA_URL.split('/')[-1]
-    tar_filepath = os.path.join(data_dir, tar_filename)
-    # Download file only if it hasn't been already
-    if not os.path.exists(tar_filepath):
-        # TODO: Change download to be Python 2 compatible
-        def _download_progress(count, block_size, total_size):
-            percent_complete = count * block_size / total_size * 100.0
-            sys.stdout.write('\r>> Downloading {0:s}... {1:>4.1f}% '
-                             'complete'.format(tar_filename, percent_complete))
-            sys.stdout.flush()
-
-        tar_filepath, _ = urllib.request.urlretrieve(DATA_URL, tar_filepath,
-                                                     _download_progress)
-        print()
-        stat_info = os.stat(tar_filepath)
-        print('Successfully downloaded {0:s} ({1:d} bytes).'.format(
-            tar_filename, stat_info.st_size))
-    # Extract the training and test binaries into data directory.
-    with tarfile.open(tar_filepath, 'r:gz') as tar:
-        tar.extractall(data_dir)
-        # TODO: Convert to TFRecords instead?
 
 
 def parse_cifar10_binary(filename_queue):
