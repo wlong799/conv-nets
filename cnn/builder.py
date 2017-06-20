@@ -1,91 +1,98 @@
 # coding=utf-8
-"""Module provides ability to easily create convolutional neural networks"""
+"""Module providing functionality for building convolutional neural nets."""
 
 import tensorflow as tf
 from collections import defaultdict
 
 
-def cnn_variable(name, shape, use_xavier_init=True, data_type=tf.float32):
-    """Creates a variable on the CPU device, with options for initialization.
-
-    Args:
-        name: Name to use for variable.
-        shape: Variable shape.
-        use_xavier_init: bool. If True, uses Xavier method for initializing
-                         the weights to improve network performance.
-                         Otherwise initializes values to 0.
-        data_type: Data type in output variable.
-
-    Returns:
-        A variable placed on the CPU with the specified parameters.
-    """
-    if not data_type.is_floating:
-        return TypeError('Variables must be initialized as floating point.')
-    with tf.device('/cpu:0'):
-        n_in = shape[-2] if len(shape) > 1 else shape[-1]
-        n_out = shape[-1]
-        for dim in shape[:-2]:
-            n_in *= dim
-            n_out *= dim
-        n_avg = (n_in + n_out) / 2.0
-        lim = (3.0 / n_avg) ** 0.5
-        if use_xavier_init:
-            initializer = tf.random_uniform_initializer(-lim, lim)
-        else:
-            initializer = tf.zeros_initializer()
-        variable = tf.get_variable(name, shape, data_type, initializer)
-    return variable
-
-
 class CNNBuilder(object):
-    """Implements logic to connect multiple layers of network together"""
+    """Implements logic to build a deep CNN.
 
-    def __init__(self, input_op, input_channels, training_phase, mode='SAME',
-                 data_format='NCHW', data_type=tf.float32):
-        self.top_layer = input_op
-        self.top_channels = input_channels
-        self.training_phase = training_phase
-        self.mode = mode
+    The CNNBuilder object is initiated by providing basic information about
+    the network it is building. As the various methods are called,
+    it keeps track of the current layer in the model, allowing it to easily
+    build up a network, layer by layer.
+
+    All functions must properly update the current top layer and its number
+    of channels, as well as return them, in order for the model to work
+    properly and be able to interface with custom created layers.
+    """
+
+    def __init__(self, input_layer, num_input_channels, is_train_phase,
+                 padding_mode='SAME', data_format='NCHW',
+                 data_type=tf.float32):
+        self.top_layer = input_layer
+        self.num_top_channels = num_input_channels
+        self.is_train_phase = is_train_phase
+        self.padding_mode = padding_mode
         self.data_format = data_format
         self.data_type = data_type
         self.layer_counts = defaultdict(int)
 
-    def convolution(self, out_channels, filter_height, filter_width,
-                    vertical_stride=1, horizontal_stride=1, use_relu=True):
-        """Adds convolutional layer to network.
+    def _get_name(self, prefix):
+        """Creates unique name from prefix based on number of layers in
+        network, and updates the layer count."""
+        name = '{0:s}{1:d}'.format(prefix, self.layer_counts[prefix])
+        self.layer_counts[prefix] += 1
+        return name
 
-         Weights for filter initialized using Xavier method, biases
-         initialized to zero, and there is an optional activation using ReLU
-         following convolution.
+    def add_layer(self, layer, num_layer_channels):
+        """Adds custom layer to model.
+
+         In case a custom layer needed to be created without using one of
+         the layer functions available in CNNBuilder, it is necessary to
+         call this function afterwards, so that CNNBuilder can add the
+         layer's information to its internal representation.
 
         Args:
-            out_channels: int. Number of channels in output.
+            layer: Tensor. New layer to add to model.
+            num_layer_channels: int. Number of channels in the layer.
+
+        Returns:
+            new_top_layer: Tensor. New top layer of model.
+            new_num_top_channels: int. Number of channels in new top layer.
+        """
+        self.top_layer = layer
+        self.num_top_channels = num_layer_channels
+        return self.top_layer, self.num_top_channels
+
+    def convolution(self, num_out_channels, filter_height, filter_width,
+                    vertical_stride=1, horizontal_stride=1,
+                    activation_method='relu'):
+        """Adds a convolutional layer to network.
+
+        Args:
+            num_out_channels: int. Number of channels in output.
             filter_height: int. Height of filter used for convolution.
             filter_width: int. Width of filter used for convolution.
             vertical_stride: int. Vertical stride.
             horizontal_stride: int. Horizontal stride.
-            use_relu: bool. If True, use ReLU activation following convolution.
+            activation_method: string. Specifies which of the available
+                               activation methods in _activation() to use.
+
         Returns:
-            Tensor output of convolution layer.
+            new_top_layer: Tensor. New top layer of model.
+            new_num_top_channels: int. Number of channels in new top layer.
         """
-        name = 'conv{0:d}'.format(self.layer_counts['conv'])
-        self.layer_counts['conv'] += 1
+        name = self._get_name('conv')
         with tf.variable_scope(name):
-            filter_shape = [filter_height, filter_width, self.top_channels,
-                            out_channels]
-            filter = cnn_variable('filter', filter_shape, True, self.data_type)
+            filter_shape = [filter_height, filter_width, self.num_top_channels,
+                            num_out_channels]
+            filter = cnn_variable('filter', filter_shape,
+                                  data_type=self.data_type)
             strides = [1, vertical_stride, horizontal_stride, 1]
             if self.data_format == 'NCHW':
                 strides = [strides[0], strides[3], strides[1], strides[2]]
-            conv = tf.nn.conv2d(self.top_layer, filter, strides, self.mode,
+            conv = tf.nn.conv2d(self.top_layer, filter, strides,
+                                self.padding_mode,
                                 data_format=self.data_format)
-            biases = cnn_variable('biases', [out_channels], False,
+            biases = cnn_variable('biases', [num_out_channels], 'zeros',
                                   self.data_type)
             pre_activation = tf.nn.bias_add(conv, biases, self.data_format)
-            conv1 = tf.nn.relu(pre_activation) if use_relu else pre_activation
+            conv1 = _activation(pre_activation, activation_method)
             self.top_layer = conv1
-            self.top_channels = out_channels
-            return conv1
+            self.num_top_channels = num_out_channels
+            return self.top_layer, self.num_top_channels
 
     def dropout(self, keep_prob=0.5):
         """Regularization dropout layer, only applied during training.
@@ -95,38 +102,39 @@ class CNNBuilder(object):
                        be dropped, if currently in training phase.
 
         Returns:
-            Tensor output from dropout layer.
+            new_top_layer: Tensor. New top layer of model.
+            new_num_top_channels: int. Number of channels in new top layer.
         """
-        name = 'dropout{0:d}'.format(self.layer_counts['dropout'])
-        self.layer_counts['dropout'] += 1
-        if not self.training_phase:
+        name = self._get_name('dropout')
+        if not self.is_train_phase:
             keep_prob = 1.0
         dropped = tf.nn.dropout(self.top_layer, keep_prob, name=name)
         self.top_layer = dropped
-        return dropped
+        return self.top_layer, self.num_top_channels
 
-    def fully_connected(self, out_channels, use_relu=True):
+    def fully_connected(self, num_out_channels, activation_method='relu'):
         """Adds a fully connected layer to the network.
 
         Args:
-            out_channels: int. Number of output neurons.
-            use_relu: bool. If True, use ReLU activation after layer.
+            num_out_channels: int. Number of output neurons.
+            activation_method: string. Specifies which of the available
+                               activation methods in _activation() to use.
 
         Returns:
-            Tensor output of fully connected layer.
+            new_top_layer: Tensor. New top layer of model.
+            new_num_top_channels: int. Number of channels in new top layer.
         """
-        name = 'fc{0:d}'.format(self.layer_counts['fc'])
-        self.layer_counts['fc'] += 1
+        name = self._get_name('fc')
         with tf.variable_scope(name):
-            shape = [self.top_channels, out_channels]
-            weights = cnn_variable('weights', shape, True, self.data_type)
-            biases = cnn_variable('biases', [out_channels], False,
+            shape = [self.num_top_channels, num_out_channels]
+            weights = cnn_variable('weights', shape, data_type=self.data_type)
+            biases = cnn_variable('biases', [num_out_channels], 'zeros',
                                   self.data_type)
             pre_activation = tf.matmul(self.top_layer, weights) + biases
-            fc = tf.nn.relu(pre_activation) if use_relu else pre_activation
+            fc = _activation(pre_activation, activation_method)
             self.top_layer = fc
-            self.top_channels = out_channels
-            return fc
+            self.num_top_channels = num_out_channels
+            return self.top_layer, self.num_top_channels
 
     def max_pooling(self, pool_height, pool_width, vertical_stride=2,
                     horizontal_stride=2):
@@ -137,40 +145,42 @@ class CNNBuilder(object):
             pool_width: int. Width of window used for pooling.
             vertical_stride: int. Vertical stride.
             horizontal_stride: int. Horizontal stride.
+
         Returns:
-            Tensor output from max pooling  layer.
+            new_top_layer: Tensor. New top layer of model.
+            new_num_top_channels: int. Number of channels in new top layer.
         """
-        name = 'mpool{0:d}'.format(self.layer_counts['mpool'])
-        self.layer_counts['mpool'] += 1
+        name = self._get_name('mpool')
         window = [1, pool_height, pool_width, 1]
         strides = [1, vertical_stride, horizontal_stride, 1]
-        pool = tf.nn.max_pool(self.top_layer, window, strides, self.mode,
+        pool = tf.nn.max_pool(self.top_layer, window, strides,
+                              self.padding_mode,
                               self.data_format, name)
         self.top_layer = pool
-        return pool
+        return self.top_layer, self.num_top_channels
 
     def normalization(self, depth_radius=None, bias=None, alpha=None,
                       beta=None):
         """Adds local response normalization layer to network.
 
         Check TensorFlow local_response_normalization() documentation for
-        default actions taken when the parameters are not provided.
+        more information on the parameters.
 
         Args:
-            depth_radius: float. Half-width of the 1-D
+            depth_radius: float. Half-width of the 1-D normalization window.
             bias: float. An offset (usually positive to avoid dividing by 0).
             alpha: float. A scale factor, usually positive.
             beta: float. Defaults to 0.5. An exponent.
 
         Returns:
-            Tensor output from normalization layer
+            new_top_layer: Tensor. New top layer of model.
+            new_num_top_channels: int. Number of channels in new top layer.
         """
-        name = 'norm{0:d}'.format(self.layer_counts['norm'])
-        self.layer_counts['norm'] += 1
+        name = self._get_name('norm')
         norm = tf.nn.local_response_normalization(self.top_layer, depth_radius,
                                                   bias, alpha, beta, name)
         self.top_layer = norm
-        return norm
+        return self.top_layer, self.num_top_channels
 
     def reshape(self, shape):
         """Adds a reshape step to the network.
@@ -179,9 +189,60 @@ class CNNBuilder(object):
             shape: list of ints. Shape to reshape to.
 
         Returns:
-            The reshaped Tensor in the network.
+            new_top_layer: Tensor. New top layer of model.
+            new_num_top_channels: int. Number of channels in new top layer.
         """
-        reshaped = tf.reshape(self.top_layer)
+        name = self._get_name('reshape')
+        reshaped = tf.reshape(self.top_layer, shape, name)
         self.top_layer = reshaped
-        self.top_channels = shape[-1]
-        return self.top_layer
+        self.num_top_channels = shape[-1]
+        return self.top_layer, self.num_top_channels
+
+
+def cnn_variable(name, shape, init_method='glorot_uniform',
+                 data_type=tf.float32):
+    """Creates a variable on the CPU device, with options for initialization.
+
+    Args:
+        name: Name to use for variable.
+        shape: Variable shape.
+        init_method: string. Specifies which initialization method to use,
+                     as available in _initializer().
+        data_type: Data type in output variable.
+
+    Returns:
+        A variable placed on the CPU with the specified parameters.
+    """
+    if not data_type.is_floating:
+        return TypeError('Variables must be initialized as floating point.')
+    with tf.device('/cpu:0'):
+        initializer = _initializer(shape, data_type, init_method)
+        variable = tf.get_variable(name, shape, data_type, initializer)
+    return variable
+
+
+def _activation(input_tensor, method):
+    method = method or 'linear'
+    return {
+        'linear': input_tensor,
+        'relu': tf.nn.relu(input_tensor),
+        'sigmoid': tf.nn.sigmoid(input_tensor),
+        'softmax': tf.nn.softmax(input_tensor),
+        'tanh': tf.nn.tanh(input_tensor)
+    }[method]
+
+
+def _initializer(shape, data_type, method):
+    fan_in = shape[-2] if len(shape) > 1 else shape[-1]
+    fan_out = shape[-1]
+    for dim in shape[:-2]:
+        fan_in *= dim
+        fan_out *= dim
+    gu_val = (6 / (fan_in + fan_out)) ** 0.5
+
+    method = method or 'zeros'
+    return {
+        'glorot_uniform': tf.random_uniform_initializer(-gu_val, gu_val,
+                                                        dtype=data_type),
+        'zeros': tf.zeros_initializer(data_type)
+    }[method]
