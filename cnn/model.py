@@ -19,33 +19,11 @@ Training is performed using a simple gradient descent method with
 exponential decay of the learning rate.
 """
 import tensorflow as tf
-
-
-def cpu_variable(name, shape, initializer):
-    """Creates a variable on CPU"""
-    with tf.device('/cpu:0'):
-        var = tf.get_variable(name, shape, tf.float32, initializer)
-    return var
-
-
-def weight_decay_variable(name, shape, stddev, decay_const):
-    """Creates a variable"""
-    var = cpu_variable(name, shape, tf.truncated_normal_initializer(
-        stddev=stddev))
-    weight_decay = tf.multiply(tf.nn.l2_loss(var), decay_const,
-                               name='weight_loss')
-    tf.add_to_collection('losses', weight_decay)
-    return var
+import cnn
 
 
 def inference(images):
     """Deep CNN model to make class predictions from CIFAR-10 images.
-
-    Architecture is as follows:
-    conv3x3x64/1 -> conv3x3x64/1 -> norm -> pool3x3/2 -> conv5x5x128/1 -> norm
-        -> pool3x3/2 -> fc512 -> fc256 -> linear10
-
-    ReLU is applied after each convolutional layer and fully connected layer.
 
     Choices made for better regularization are as follows. Pooling layers have
     slight overlap (stride of 2x2). Both fully connected layers employ
@@ -60,63 +38,20 @@ def inference(images):
         logits: 2D Tensor [BATCH_SIZE, 10].
     """
     batch_size = images.get_shape().as_list()[0]
-    # conv1
-    with tf.variable_scope('conv1') as scope:
-        filter = cpu_variable('weights', [3, 3, 3, 64], 5e-2)
-        conv = tf.nn.conv2d(images, filter, [1, 1, 1, 1], padding='SAME')
-        biases = cpu_variable('biases', [64], tf.constant_initializer(0.0))
-        pre_activation = tf.nn.bias_add(conv, biases)
-        conv1 = tf.nn.relu(pre_activation, name=scope.name)
 
-    # conv2
-    with tf.variable_scope('conv2') as scope:
-        filter = cpu_variable('weights', [3, 3, 64, 64], 5e-2)
-        conv = tf.nn.conv2d(conv1, filter, [1, 1, 1, 1], padding='SAME')
-        biases = cpu_variable('biases', [64], tf.constant_initializer(0.0))
-        pre_activation = tf.nn.bias_add(conv, biases)
-        conv2 = tf.nn.relu(pre_activation, name=scope.name)
+    builder = cnn.builder.CNNBuilder(images, 3, True)
+    builder.convolution(64, 3, 3)
+    builder.convolution(64, 3, 3)
+    builder.normalization()
+    builder.max_pooling(3, 3)
+    builder.convolution(128, 5, 5)
+    builder.normalization()
+    builder.max_pooling(3, 3)
+    builder.reshape([batch_size, -1])
+    builder.fully_connected(512)
+    builder.fully_connected(256)
 
-    # normalization/pooling 1
-    norm1 = tf.nn.lrn(conv2, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
-                      name='norm1')
-    pool1 = tf.nn.max_pool(norm1, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1],
-                           padding='SAME', name='pool1')
-
-    # conv3
-    with tf.variable_scope('conv3') as scope:
-        filter = cpu_variable('weights', [5, 5, 64, 128], 5e-2)
-        conv = tf.nn.conv2d(pool1, filter, [1, 1, 1, 1], padding='SAME')
-        biases = cpu_variable('biases', [64], tf.constant_initializer(0.0))
-        pre_activation = tf.nn.bias_add(conv, biases)
-        conv3 = tf.nn.relu(pre_activation, name=scope.name)
-
-    # normalization/pooling 2
-    norm2 = tf.nn.lrn(conv3, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
-                      name='norm2')
-    pool2 = tf.nn.max_pool(norm2, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1],
-                           padding='SAME', name='pool2')
-
-    # fc1
-    with tf.variable_scope('fc1') as scope:
-        reshape = tf.reshape(pool2, [pool2.get_shape()[0].value, -1])
-        dim = reshape.get_shape()[1].value
-        weights = weight_decay_variable('weights', [dim, 512], 5e-2, 5e-3)
-        biases = cpu_variable('biases', [512], tf.constant_initializer(0.1))
-        fc1 = tf.nn.relu(tf.matmul(reshape, weights) + biases, name=scope.name)
-
-    # fc2
-    with tf.variable_scope('fc1') as scope:
-        weights = weight_decay_variable('weights', [512, 256], 5e-2, 5e-3)
-        biases = cpu_variable('biases', [256], tf.constant_initializer(0.1))
-        fc2 = tf.nn.relu(tf.matmul(fc1, weights) + biases, name=scope.name)
-
-    # linear
-    with tf.variable_scope('linear') as scope:
-        weights = cpu_variable('weights', [192, 10], 1 / 192.0)
-        biases = cpu_variable('biases', [10], tf.constant_initializer(0.0))
-        linear = tf.add(tf.matmul(fc2, weights), biases, name=scope.name)
-
-    return linear
+    return builder.fully_connected(10)
 
 
 def loss(logits, labels):

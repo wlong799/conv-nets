@@ -128,7 +128,7 @@ class CNNBuilder(object):
             self.top_channels = out_channels
             return fc
 
-    def max_pooling(self, pool_height, pool_width, vertical_stride=1,
+    def max_pooling(self, pool_height, pool_width, vertical_stride=2,
                     horizontal_stride=2):
         """Adds maximum pooling layer to network.
 
