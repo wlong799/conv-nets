@@ -19,7 +19,7 @@ import tensorflow as tf
 
 def get_minibatch(data_dir, batch_size, image_height,
                   image_width, phase='train', distort_images=True,
-                  data_format='NHWC', num_threads=32, min_buffer_size=10000):
+                  data_format='NCHW', num_threads=32, min_buffer_size=10000):
     """Obtains batch of images to use for training or testing.
 
     Parses the proper TFRecords file located in the data directory, applies
@@ -53,32 +53,42 @@ def get_minibatch(data_dir, batch_size, image_height,
                      0-9, corresponding to the class of the images in
                      image_batch.
     """
-    pattern = '*{}*.tfrecords'.format(phase)
-    pattern = os.path.join(data_dir, pattern)
-    filename_queue = tf.train.string_input_producer(
-        tf.train.match_filenames_once(pattern))
+    if phase not in ['train', 'valid', 'test']:
+        raise ValueError('Phase must be one of "train", "valid", or "test"')
+    with tf.name_scope('{}_batch_preprocessing'.format(phase)):
+        # Add proper TFRecord files to queue
+        pattern = '*{}*.tfrecords'.format(phase)
+        pattern = os.path.join(data_dir, pattern)
+        filename_queue = tf.train.string_input_producer(
+            tf.train.match_filenames_once(pattern))
 
-    image, label = parse_cifar10_example(filename_queue)
-    distort = distort_images and phase == 'train'
-    processed_image = process_image(image, image_height, image_width, distort)
+        # Parse an image and apply preprocessing steps
+        image, label = parse_cifar10_example(filename_queue)
+        distort = distort_images and phase == 'train'
+        processed_image = process_image(image, image_height, image_width,
+                                        distort)
+        normalized_image = tf.image.per_image_standardization(processed_image)
 
-    if data_format == 'NCHW':
-        processed_image = tf.transpose(processed_image, [2, 0, 1])
-        processed_image.set_shape([3, image_height, image_width])
-    else:
-        processed_image.set_shape([image_height, image_width, 3])
-    label.set_shape([1])
+        # Add summaries
+        tf.summary.image('original_image', image)
+        tf.summary.image('processed_image', processed_image)
 
-    capacity = min_buffer_size + num_threads * batch_size
-    if phase == 'train':
-        image_batch, label_batch = tf.train.shuffle_batch(
-            [processed_image, label], batch_size, capacity, min_buffer_size,
-            num_threads)
-    else:
-        image_batch, label_batch = tf.train.batch([processed_image, label],
-                                                  batch_size, num_threads,
-                                                  capacity)
-    return image_batch, label_batch
+        # Ensure image is in correct format
+        if data_format == 'NCHW':
+            normalized_image = tf.transpose(normalized_image, [2, 0, 1])
+
+        # Set up queue of example batches
+        capacity = min_buffer_size + num_threads * batch_size
+        if phase == 'train':
+            image_batch, label_batch = tf.train.shuffle_batch(
+                [normalized_image, label], batch_size, capacity,
+                min_buffer_size, num_threads)
+        else:
+            image_batch, label_batch = tf.train.batch(
+                [normalized_image, label],
+                batch_size, num_threads,
+                capacity)
+        return image_batch, label_batch
 
 
 def parse_cifar10_example(filename_queue):
@@ -91,22 +101,19 @@ def parse_cifar10_example(filename_queue):
         image: 3D uint8 Tensor [height, width, channels]. Image in RGB.
         label: int32 Tensor with value in range [0, 9]. The input class.
     """
-    reader = tf.TFRecordReader()
-    _, serialized_example = reader.read(filename_queue)
-    features = tf.parse_single_example(serialized_example, features={
-        'height': tf.FixedLenFeature([], tf.int64),
-        'width': tf.FixedLenFeature([], tf.int64),
-        'channels': tf.FixedLenFeature([], tf.int64),
-        'label': tf.FixedLenFeature([], tf.int64),
-        'raw_image': tf.FixedLenFeature([], tf.string)
-    })
-    label = tf.cast(tf.decode_raw(features['label'], tf.uint8), tf.int32)
-    height, width, channels = (
-        features['height'], features['width'], features['channels'])
-    image_1d = tf.decode_raw(features['image_raw'], tf.uint8)
-    image = tf.reshape(image_1d, [channels, height, width])
-    reshaped_image = tf.transpose(image, [1, 2, 0])
-    return reshaped_image, label
+    with tf.name_scope('example_parsing'):
+        reader = tf.TFRecordReader()
+        _, serialized_example = reader.read(filename_queue)
+        features = tf.parse_single_example(serialized_example, features={
+            'height': tf.FixedLenFeature([], tf.int64),
+            'width': tf.FixedLenFeature([], tf.int64),
+            'channels': tf.FixedLenFeature([], tf.int64),
+            'label': tf.FixedLenFeature([], tf.int64),
+            'encoded_image': tf.FixedLenFeature([], tf.string)
+        })
+        label = tf.cast(features['label'], tf.int32)
+        image = tf.image.decode_png(features['encoded_image'], 3, tf.uint8)
+        return image, label
 
 
 def process_image(image, image_height, image_width, distort_image):
@@ -118,20 +125,21 @@ def process_image(image, image_height, image_width, distort_image):
         image_width: width. Width of processed image.
         distort_image: bool. Whether random distortion steps should be applied.
     Returns:
-        processed_image: 3D float32 tensor [image_height, image_width, 3].
-                         Standardized to zero mean and unit variance.
+        processed_image: float32 image Tensor [image_height, image_width, 3].
     """
     # TODO: Consider making other resizing options available instead
-    processed_image = tf.image.convert_image_dtype(image, tf.float32)
-    if distort_image:
-        processed_image = tf.random_crop(processed_image,
-                                         [image_height, image_width, 3])
-        processed_image = distort_color(processed_image)
-    else:
-        processed_image = tf.image.resize_image_with_crop_or_pad(
-            processed_image, image_height, image_width)
-    processed_image = tf.image.per_image_standardization(processed_image)
-    return processed_image
+    with tf.name_scope('image_processing'):
+        processed_image = tf.image.convert_image_dtype(image, tf.float32)
+        if distort_image:
+            with tf.name_scope('image_distortion'):
+                processed_image = tf.random_crop(processed_image,
+                                                 [image_height, image_width,
+                                                  3])
+                processed_image = distort_color(processed_image)
+        else:
+            processed_image = tf.image.resize_image_with_crop_or_pad(
+                processed_image, image_height, image_width)
+        return processed_image
 
 
 def distort_color(image):

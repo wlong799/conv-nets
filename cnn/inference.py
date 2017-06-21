@@ -19,9 +19,7 @@ Training is performed using a simple gradient descent method with
 exponential decay of the learning rate.
 """
 import tensorflow as tf
-import cnn.simple_model
-import cnn.builder
-
+import cnn
 
 def inference(images):
     """Deep CNN model to make class predictions from CIFAR-10 images.
@@ -59,6 +57,5 @@ def loss(logits, labels):
     cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
         labels=labels, logits=logits, name='cross_entropy_per_example')
     cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
-    tf.add_to_collection('losses', cross_entropy_mean)
 
-    return tf.add_n(tf.get_collection('losses'), name='total_loss')
+    return cross_entropy_mean

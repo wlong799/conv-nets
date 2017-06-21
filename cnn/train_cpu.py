@@ -7,13 +7,13 @@ import tensorflow as tf
 import cnn
 
 
-def train():
+def train(batch_size=32):
     """ Builds an optimizer to update parameters of model."""
     with tf.device('/cpu:0'):
-        image_batch, label_batch = cnn.data_reader.get_minibatch(
-            'data', 256)
-    logits = cnn.inference.inference(image_batch)
-    total_loss = cnn.inference.loss(logits, label_batch)
+        images, labels = cnn.preprocessor.get_minibatch(
+            'data/cifar10', 64, 24, 24)
+    logits = cnn.inference.inference(images)
+    total_loss = cnn.inference.loss(logits, labels)
     opt = tf.train.GradientDescentOptimizer(0.001)
     train_op = opt.minimize(total_loss)
     with tf.train.MonitoredTrainingSession(
