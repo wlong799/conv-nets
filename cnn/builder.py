@@ -32,7 +32,7 @@ class CNNBuilder(object):
     def _get_name(self, prefix):
         """Creates unique name from prefix based on number of layers in
         network, and updates the layer count."""
-        name = '{0:s}{1:d}'.format(prefix, self.layer_counts[prefix])
+        name = '{}{}'.format(prefix, self.layer_counts[prefix])
         self.layer_counts[prefix] += 1
         return name
 
@@ -56,15 +56,15 @@ class CNNBuilder(object):
         self.num_top_channels = num_layer_channels
         return self.top_layer, self.num_top_channels
 
-    def convolution(self, num_out_channels, filter_height, filter_width,
+    def convolution(self, num_out_channels, kernel_height, kernel_width,
                     vertical_stride=1, horizontal_stride=1,
                     activation_method='relu'):
         """Adds a convolutional layer to network.
 
         Args:
             num_out_channels: int. Number of channels in output.
-            filter_height: int. Height of filter used for convolution.
-            filter_width: int. Width of filter used for convolution.
+            kernel_height: int. Height of filter used for convolution.
+            kernel_width: int. Width of filter used for convolution.
             vertical_stride: int. Vertical stride.
             horizontal_stride: int. Horizontal stride.
             activation_method: string. Specifies which of the available
@@ -76,20 +76,23 @@ class CNNBuilder(object):
         """
         name = self._get_name('conv')
         with tf.variable_scope(name):
-            filter_shape = [filter_height, filter_width, self.num_top_channels,
+            kernel_shape = [kernel_height, kernel_width, self.num_top_channels,
                             num_out_channels]
-            filter = cnn_variable('filter', filter_shape,
+            kernel = cnn_variable('weights', kernel_shape,
                                   data_type=self.data_type)
-            strides = [1, vertical_stride, horizontal_stride, 1]
-            if self.data_format == 'NCHW':
-                strides = [strides[0], strides[3], strides[1], strides[2]]
-            conv = tf.nn.conv2d(self.top_layer, filter, strides,
+            if self.data_format == 'NHWC':
+                strides = [1, vertical_stride, horizontal_stride, 1]
+            else:
+                strides = [1, 1, vertical_stride, horizontal_stride]
+            conv = tf.nn.conv2d(self.top_layer, kernel, strides,
                                 self.padding_mode,
                                 data_format=self.data_format)
             biases = cnn_variable('biases', [num_out_channels], 'zeros',
                                   self.data_type)
-            pre_activation = tf.nn.bias_add(conv, biases, self.data_format)
-            conv1 = _activation(pre_activation, activation_method)
+            pre_activation = tf.reshape(
+                tf.nn.bias_add(conv, biases, self.data_format),
+                conv.get_shape())
+            conv1 = _activation(pre_activation, activation_method, name)
             self.top_layer = conv1
             self.num_top_channels = num_out_channels
             return self.top_layer, self.num_top_channels
@@ -112,7 +115,7 @@ class CNNBuilder(object):
         self.top_layer = dropped
         return self.top_layer, self.num_top_channels
 
-    def fully_connected(self, num_out_channels, activation_method='relu'):
+    def affine(self, num_out_channels, activation_method='relu'):
         """Adds a fully connected layer to the network.
 
         Args:
@@ -124,25 +127,25 @@ class CNNBuilder(object):
             new_top_layer: Tensor. New top layer of model.
             new_num_top_channels: int. Number of channels in new top layer.
         """
-        name = self._get_name('fc')
+        name = self._get_name('affine')
         with tf.variable_scope(name):
             shape = [self.num_top_channels, num_out_channels]
-            weights = cnn_variable('weights', shape, data_type=self.data_type)
+            kernel = cnn_variable('weights', shape, data_type=self.data_type)
             biases = cnn_variable('biases', [num_out_channels], 'zeros',
                                   self.data_type)
-            pre_activation = tf.matmul(self.top_layer, weights) + biases
-            fc = _activation(pre_activation, activation_method)
-            self.top_layer = fc
+            pre_activation = tf.matmul(self.top_layer, kernel) + biases
+            affine = _activation(pre_activation, activation_method, name)
+            self.top_layer = affine
             self.num_top_channels = num_out_channels
             return self.top_layer, self.num_top_channels
 
-    def max_pooling(self, pool_height, pool_width, vertical_stride=2,
+    def max_pooling(self, kernel_height, kernel_width, vertical_stride=2,
                     horizontal_stride=2):
         """Adds maximum pooling layer to network.
 
         Args:
-            pool_height: int. Height of window used for pooling.
-            pool_width: int. Width of window used for pooling.
+            kernel_height: int. Height of window used for pooling.
+            kernel_width: int. Width of window used for pooling.
             vertical_stride: int. Vertical stride.
             horizontal_stride: int. Horizontal stride.
 
@@ -151,9 +154,14 @@ class CNNBuilder(object):
             new_num_top_channels: int. Number of channels in new top layer.
         """
         name = self._get_name('mpool')
-        window = [1, pool_height, pool_width, 1]
-        strides = [1, vertical_stride, horizontal_stride, 1]
-        pool = tf.nn.max_pool(self.top_layer, window, strides,
+        if self.data_format == 'NHWC':
+            kernel_shape = [1, kernel_height, kernel_width, 1]
+            strides = [1, vertical_stride, horizontal_stride, 1]
+        else:
+            kernel_shape = [1, 1, kernel_height, kernel_width]
+            strides = [1, 1, vertical_stride, horizontal_stride]
+
+        pool = tf.nn.max_pool(self.top_layer, kernel_shape, strides,
                               self.padding_mode,
                               self.data_format, name)
         self.top_layer = pool
@@ -194,8 +202,12 @@ class CNNBuilder(object):
         """
         name = self._get_name('reshape')
         reshaped = tf.reshape(self.top_layer, shape, name)
+        new_shape = reshaped.get_shape()
         self.top_layer = reshaped
-        self.num_top_channels = shape[-1]
+        if self.data_format == 'NHWC' or len(shape) < 4:
+            self.num_top_channels = new_shape[-1].value
+        else:
+            self.num_top_channels = new_shape[-3].value
         return self.top_layer, self.num_top_channels
 
 
@@ -221,14 +233,14 @@ def cnn_variable(name, shape, init_method='glorot_uniform',
     return variable
 
 
-def _activation(input_tensor, method):
+def _activation(input_tensor, method, name=None):
     method = method or 'linear'
     return {
         'linear': input_tensor,
-        'relu': tf.nn.relu(input_tensor),
-        'sigmoid': tf.nn.sigmoid(input_tensor),
-        'softmax': tf.nn.softmax(input_tensor),
-        'tanh': tf.nn.tanh(input_tensor)
+        'relu': tf.nn.relu(input_tensor, name),
+        'sigmoid': tf.nn.sigmoid(input_tensor, name),
+        'softmax': tf.nn.softmax(input_tensor, name=name),
+        'tanh': tf.nn.tanh(input_tensor, name)
     }[method]
 
 

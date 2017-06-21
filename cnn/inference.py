@@ -21,6 +21,7 @@ exponential decay of the learning rate.
 import tensorflow as tf
 import cnn
 
+
 def inference(images):
     """Deep CNN model to make class predictions from CIFAR-10 images.
 
@@ -38,7 +39,7 @@ def inference(images):
     """
     batch_size = images.get_shape().as_list()[0]
     model = cnn.simple_model.SimpleModel(batch_size, 10)
-    builder = cnn.builder.CNNBuilder(images, 3, True)
+    builder = cnn.builder.CNNBuilder(images, 3, True, data_format='NHWC')
     return model.inference(builder)
 
 
@@ -53,7 +54,6 @@ def loss(logits, labels):
     Returns:
         Loss for the current model.
     """
-    labels = tf.cast(labels, tf.int64)
     cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
         labels=labels, logits=logits, name='cross_entropy_per_example')
     cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')

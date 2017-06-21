@@ -21,7 +21,7 @@ class SimpleModel(cnn.model.Model):
         cnn_builder.normalization()
         cnn_builder.max_pooling(3, 3)
         cnn_builder.reshape([self.batch_size, -1])
-        cnn_builder.fully_connected(512)
-        cnn_builder.fully_connected(256)
-
-        return cnn_builder.fully_connected(self.num_classes)
+        cnn_builder.affine(512)
+        cnn_builder.affine(256)
+        logits, _ = cnn_builder.affine(self.num_classes)
+        return logits

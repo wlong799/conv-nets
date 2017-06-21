@@ -73,10 +73,6 @@ def get_minibatch(data_dir, batch_size, image_height,
         tf.summary.image('original_image', image)
         tf.summary.image('processed_image', processed_image)
 
-        # Ensure image is in correct format
-        if data_format == 'NCHW':
-            normalized_image = tf.transpose(normalized_image, [2, 0, 1])
-
         # Set up queue of example batches
         capacity = min_buffer_size + num_threads * batch_size
         if phase == 'train':
@@ -88,6 +84,8 @@ def get_minibatch(data_dir, batch_size, image_height,
                 [normalized_image, label],
                 batch_size, num_threads,
                 capacity)
+        if data_format == 'NCHW':
+            image_batch = tf.transpose(image_batch, [0, 3, 1, 2])
         return image_batch, label_batch
 
 
