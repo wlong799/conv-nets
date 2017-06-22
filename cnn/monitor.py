@@ -16,7 +16,6 @@ def get_monitored_cnn_session(checkpoints_dir=None, summaries_dir=None,
         scaffold, config=config, checkpoint_dir=checkpoints_dir)
 
     hooks = []
-    summaries_dir = summaries_dir or checkpoints_dir
     if checkpoints_dir and save_checkpoint_secs and save_checkpoint_secs > 0:
         hooks.append(tf.train.CheckpointSaverHook(checkpoints_dir,
                                                   save_checkpoint_secs,
