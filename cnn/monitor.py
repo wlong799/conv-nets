@@ -6,18 +6,19 @@ import time
 import tensorflow as tf
 
 
-def get_monitored_cnn_session(checkpoint_dir, loss=None, batch_size=None,
-                              log_frequency=10, summaries_dir=None, hooks=None,
+def get_monitored_cnn_session(checkpoints_dir=None, summaries_dir=None,
+                              loss=None, batch_size=None, log_frequency=10,
                               save_checkpoint_secs=600,
                               save_summaries_steps=100, config=None):
+    checkpoints_dir = checkpoints_dir or 'checkpoints/'
     scaffold = tf.train.Scaffold()
     session_creator = tf.train.ChiefSessionCreator(
-        scaffold, config=config, checkpoint_dir=checkpoint_dir)
+        scaffold, config=config, checkpoint_dir=checkpoints_dir)
 
-    hooks = hooks or []
-    summaries_dir = summaries_dir or checkpoint_dir
-    if checkpoint_dir and save_checkpoint_secs and save_checkpoint_secs > 0:
-        hooks.append(tf.train.CheckpointSaverHook(checkpoint_dir,
+    hooks = []
+    summaries_dir = summaries_dir or checkpoints_dir
+    if checkpoints_dir and save_checkpoint_secs and save_checkpoint_secs > 0:
+        hooks.append(tf.train.CheckpointSaverHook(checkpoints_dir,
                                                   save_checkpoint_secs,
                                                   scaffold=scaffold))
     if summaries_dir and save_summaries_steps and save_summaries_steps > 0:
@@ -62,7 +63,7 @@ class _LoggerHook(tf.train.SessionRunHook):
             loss_value = run_values.results[0]
             examples_per_sec = self.log_frequency * self.batch_size / duration
             secs_per_batch = float(duration / self.log_frequency)
-            format_str = '{} | step {} | Loss = {:.2f} | ' \
+            format_str = '{}: step {} | Loss = {:.2f} | ' \
                          '{:.1f} examples/second | {:.3f} seconds/batch)'
             print(format_str.format(datetime.datetime.now(), self.step,
                                     loss_value, examples_per_sec,

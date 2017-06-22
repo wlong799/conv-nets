@@ -19,7 +19,7 @@ import tensorflow as tf
 
 def get_minibatch(data_dir, batch_size, image_height,
                   image_width, phase='train', distort_images=True,
-                  data_format='NCHW', num_threads=32, min_buffer_size=10000):
+                  data_format='NHWC', num_threads=32, min_buffer_size=10000):
     """Obtains batch of images to use for training or testing.
 
     Parses the proper TFRecords file located in the data directory, applies

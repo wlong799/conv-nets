@@ -1,5 +1,6 @@
 # coding=utf-8
 """Contains Model, a superclass for CNN model architectures"""
+import cnn
 
 
 class Model(object):
@@ -29,3 +30,12 @@ class Model(object):
                          will perform this step itself.
         """
         raise ValueError("Inference must be implemented in derived classes.")
+
+
+def get_model(model_name, batch_size, num_classes):
+    """Returns model with the given name."""
+    # TODO: Implement function
+    if model_name == 'simple':
+        return cnn.simple_model.SimpleModel(batch_size, num_classes)
+    else:
+        raise ValueError("Model not implemented.")

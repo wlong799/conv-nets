@@ -19,7 +19,7 @@ class CNNBuilder(object):
     """
 
     def __init__(self, input_layer, num_input_channels, is_train_phase,
-                 padding_mode='SAME', data_format='NCHW',
+                 padding_mode='SAME', data_format='NHWC',
                  data_type=tf.float32):
         self.top_layer = input_layer
         self.num_top_channels = num_input_channels
