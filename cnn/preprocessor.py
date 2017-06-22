@@ -70,8 +70,8 @@ def get_minibatch(data_dir, batch_size, image_height,
         normalized_image = tf.image.per_image_standardization(processed_image)
 
         # Add summaries
-        tf.summary.image('original_image', image)
-        tf.summary.image('processed_image', processed_image)
+        tf.summary.image('original_image', tf.expand_dims(image, 0))
+        tf.summary.image('processed_image', tf.expand_dims(processed_image, 0))
 
         # Set up queue of example batches
         capacity = min_buffer_size + num_threads * batch_size

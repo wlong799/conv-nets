@@ -35,9 +35,8 @@ def train():
 
         apply_grad_op = opt.apply_gradients(grads, global_step)
 
-        with tf.train.MonitoredTrainingSession(
-                hooks=[tf.train.StopAtStepHook(last_step=1000),
-                       tf.train.NanTensorHook(total_loss)]) as mon_sess:
+        with cnn.monitor.get_monitored_cnn_session('cifar', total_loss,
+                                                   BATCH_SIZE) as mon_sess:
             while not mon_sess.should_stop():
                 mon_sess.run(apply_grad_op)
 

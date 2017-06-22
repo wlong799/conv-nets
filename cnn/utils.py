@@ -127,7 +127,8 @@ def create_cifar10_record_from_binaries(record_filename, data_filenames):
         for label, image_string in struct.iter_unpack(example_format, buffer):
             image_1d = np.fromstring(image_string, np.uint8)
             image_3d = image_1d.reshape(
-                (image_height, image_width, image_channels))
+                (image_channels, image_height, image_width))
+            image_3d = image_3d.transpose([1, 2, 0])
             encoded_image = coder.encode_png(image_3d)
             example = tf.train.Example(features=tf.train.Features(feature={
                 'height': _int64_feature(image_height),
