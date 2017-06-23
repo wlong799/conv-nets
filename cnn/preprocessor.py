@@ -17,8 +17,8 @@ import random
 import tensorflow as tf
 
 
-def get_minibatch(data_dir, batch_size, image_height,
-                  image_width, phase='train', distort_images=True,
+def get_minibatch(data_dir, batch_size, image_height=None,
+                  image_width=None, phase='train', distort_images=True,
                   data_format='NHWC', num_threads=32, min_buffer_size=10000):
     """Obtains batch of images to use for training or testing.
 
@@ -34,8 +34,8 @@ def get_minibatch(data_dir, batch_size, image_height,
         data_dir: Directory containing the TFRecords files. See above for
                   required naming convention of files.
         batch_size: int. Number of examples per batch.
-        image_height: int. Height of processed images.
-        image_width: int. Width of processed images.
+        image_height: int. Height of processed images, or None for no resize.
+        image_width: int. Width of processed images, or None for no resize.
         phase: Either 'train', 'test', or 'valid'.
         distort_images: bool. If true, and if training phase, images will be
                         distorted as a form of data augmentation.
@@ -65,6 +65,9 @@ def get_minibatch(data_dir, batch_size, image_height,
         # Parse an image and apply preprocessing steps
         image, label = parse_cifar10_example(filename_queue)
         distort = distort_images and phase == 'train'
+        if not image_height or not image_width:
+            image_height, image_width = _get_dims(image)
+        print(image_height, image_width)
         processed_image = process_image(image, image_height, image_width,
                                         distort)
         normalized_image = tf.image.per_image_standardization(processed_image)
@@ -110,7 +113,7 @@ def parse_cifar10_example(filename_queue):
             'encoded_image': tf.FixedLenFeature([], tf.string)
         })
         label = tf.cast(features['label'], tf.int32)
-        image = tf.image.decode_png(features['encoded_image'], 3, tf.uint8)
+        image = tf.image.decode_png(features['encoded_image'], 3)
         return image, label
 
 
@@ -130,9 +133,8 @@ def process_image(image, image_height, image_width, distort_image):
         processed_image = tf.image.convert_image_dtype(image, tf.float32)
         if distort_image:
             with tf.name_scope('image_distortion'):
-                processed_image = tf.random_crop(processed_image,
-                                                 [image_height, image_width,
-                                                  3])
+                processed_image = tf.random_crop(
+                    processed_image, [image_height, image_width, 3])
                 processed_image = distort_color(processed_image)
         else:
             processed_image = tf.image.resize_image_with_crop_or_pad(
@@ -148,3 +150,9 @@ def distort_color(image):
                      lambda img: tf.image.random_saturation(img, 0.5, 1.5)]
     random.shuffle(distort_funcs)
     return functools.reduce(lambda res, f: f(res), distort_funcs, image)
+
+
+def _get_dims(image):
+    with tf.Session() as sess:
+        image_val = sess.run(image)
+        return len(image_val), len(image_val[0])

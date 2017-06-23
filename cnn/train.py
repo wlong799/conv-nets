@@ -11,7 +11,7 @@ def train(model_name, image_height, image_width, num_classes, data_dir,
           checkpoints_dir=None, summaries_dir=None, batch_size=128,
           distort_images=True, num_preprocess_threads=32,
           min_buffer_size=10000, learning_rate=0.1, log_frequency=10,
-          save_checkpoint_secs=600, save_summaries_steps=100, config=None):
+          save_checkpoint_secs=600, save_summaries_steps=100):
     """ Builds an optimizer to update parameters of model."""
     with tf.Graph().as_default():
         global_step = tf.train.get_or_create_global_step()
@@ -40,6 +40,6 @@ def train(model_name, image_height, image_width, num_classes, data_dir,
         with cnn.monitor.get_monitored_cnn_session(
                 checkpoints_dir, summaries_dir, cross_entropy_mean,
                 batch_size, log_frequency, save_checkpoint_secs,
-                save_summaries_steps, config) as mon_sess:
+                save_summaries_steps) as mon_sess:
             while not mon_sess.should_stop():
                 mon_sess.run(apply_grad_op)

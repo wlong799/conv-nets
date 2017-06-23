@@ -9,11 +9,11 @@ import tensorflow as tf
 def get_monitored_cnn_session(checkpoints_dir=None, summaries_dir=None,
                               loss=None, batch_size=None, log_frequency=10,
                               save_checkpoint_secs=600,
-                              save_summaries_steps=100, config=None):
+                              save_summaries_steps=100):
     checkpoints_dir = checkpoints_dir or 'checkpoints/'
     scaffold = tf.train.Scaffold()
     session_creator = tf.train.ChiefSessionCreator(
-        scaffold, config=config, checkpoint_dir=checkpoints_dir)
+        scaffold, checkpoint_dir=checkpoints_dir)
 
     hooks = []
     if checkpoints_dir and save_checkpoint_secs and save_checkpoint_secs > 0:

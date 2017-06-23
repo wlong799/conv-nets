@@ -11,8 +11,7 @@ import cnn
 
 def evaluate(model_name, image_height, image_width, num_classes, data_dir,
              checkpoints_dir, num_examples=1000, data_format='NHWC',
-             batch_size=128,
-             num_preprocess_threads=32, min_buffer_size=10000, config=None):
+             batch_size=128, num_preprocess_threads=32):
     """Evaluates most recent checkpoint for accuracy."""
     with tf.Graph().as_default():
         global_step = tf.train.get_or_create_global_step()
@@ -20,8 +19,7 @@ def evaluate(model_name, image_height, image_width, num_classes, data_dir,
         with tf.device('/cpu:0'):
             images, labels = cnn.preprocessor.get_minibatch(
                 data_dir, batch_size, image_height, image_width, 'test',
-                data_format=data_format, num_threads=num_preprocess_threads,
-                min_buffer_size=min_buffer_size)
+                data_format=data_format, num_threads=num_preprocess_threads)
 
         model = cnn.model.get_model(model_name, batch_size, num_classes)
         builder = cnn.builder.CNNBuilder(images, 3, False,
@@ -36,7 +34,7 @@ def evaluate(model_name, image_height, image_width, num_classes, data_dir,
 
         with cnn.monitor.get_monitored_cnn_session(
                 checkpoints_dir, log_frequency=None, save_checkpoint_secs=None,
-                save_summaries_steps=None, config=config) as mon_sess:
+                save_summaries_steps=None) as mon_sess:
             while not mon_sess.should_stop() and steps < num_steps:
                 predictions = mon_sess.run(top_k_op)
                 num_correct += np.sum(predictions)
@@ -45,4 +43,3 @@ def evaluate(model_name, image_height, image_width, num_classes, data_dir,
         precision = num_correct / total_examples
         print("{}: Precision @ 1 = {:.3f}".format(datetime.datetime.now(),
                                                   precision))
-
