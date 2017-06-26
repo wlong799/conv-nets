@@ -32,10 +32,17 @@ class Model(object):
         raise ValueError("Inference must be implemented in derived classes.")
 
 
-def get_model(model_name, batch_size, num_classes):
-    """Returns model with the given name."""
-    # TODO: Implement function
-    if model_name == 'simple':
-        return cnn.simple_model.SimpleModel(batch_size, num_classes)
-    else:
-        raise ValueError("Model not implemented.")
+def get_model(model_config: cnn.config.ModelConfig):
+    """Returns model using the specified configuration. Should be edited as
+    more model types are made available."""
+    from cnn.model.simple_model import SimpleModel
+    try:
+        model = {
+            'simple': SimpleModel(model_config.batch_size,
+                                  model_config.num_classes)
+        }[model_config.model_type]
+    except KeyError as e:
+        e.args = e.args or ('',)
+        e.args += ("Model '{}' not available.".format(model_config.model_type))
+        raise
+    return model

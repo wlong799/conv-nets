@@ -1,8 +1,11 @@
 # coding=utf-8
 """Module providing functionality for building convolutional neural nets."""
 
-import tensorflow as tf
 from collections import defaultdict
+
+import tensorflow as tf
+
+import cnn
 
 
 class CNNBuilder(object):
@@ -18,23 +21,14 @@ class CNNBuilder(object):
     properly and be able to interface with custom created layers.
     """
 
-    def __init__(self, input_layer, num_input_channels, is_train_phase,
-                 padding_mode='SAME', data_format='NHWC',
-                 data_type=tf.float32):
+    def __init__(self, input_layer, model_config: cnn.config.ModelConfig):
         self.top_layer = input_layer
-        self.num_top_channels = num_input_channels
-        self.is_train_phase = is_train_phase
-        self.padding_mode = padding_mode
-        self.data_format = data_format
-        self.data_type = data_type
+        self.num_top_channels = model_config.image_channels
+        self.is_train_phase = model_config.phase == 'train'
+        self.padding_mode = model_config.padding_mode
+        self.data_format = model_config.data_format
+        self.data_type = model_config.data_type
         self.layer_counts = defaultdict(int)
-
-    def _get_name(self, prefix):
-        """Creates unique name from prefix based on number of layers in
-        network, and updates the layer count."""
-        name = '{}{}'.format(prefix, self.layer_counts[prefix])
-        self.layer_counts[prefix] += 1
-        return name
 
     def add_layer(self, layer, num_layer_channels):
         """Adds custom layer to model.
@@ -209,6 +203,13 @@ class CNNBuilder(object):
         else:
             self.num_top_channels = new_shape[-3].value
         return self.top_layer, self.num_top_channels
+
+    def _get_name(self, prefix):
+        """Creates unique name from prefix based on number of layers in
+        network, and updates the layer count."""
+        name = '{}{}'.format(prefix, self.layer_counts[prefix])
+        self.layer_counts[prefix] += 1
+        return name
 
 
 def cnn_variable(name, shape, init_method='glorot_uniform',

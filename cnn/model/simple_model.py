@@ -2,11 +2,11 @@
 """Simple model designed for classifying small images (e.g. MNIST or
 CIFAR-10 datasets."""
 
-import cnn.model
+import cnn
 
 
 class SimpleModel(cnn.model.Model):
-    """Simple CNN model"""
+    """Simple CNN model."""
 
     def __init__(self, batch_size, num_classes):
         super(SimpleModel, self).__init__('simple', batch_size, num_classes)

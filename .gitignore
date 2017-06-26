@@ -2,3 +2,4 @@
 
 /cifar10/
 !/cifar10/cifar10.py
+!/cifar10/cifar10.ini

@@ -5,36 +5,56 @@ import time
 
 import tensorflow as tf
 
+import cnn
 
-def get_monitored_cnn_session(checkpoints_dir=None, summaries_dir=None,
-                              loss=None, batch_size=None, log_frequency=10,
-                              save_checkpoint_secs=600,
-                              save_summaries_steps=100):
-    checkpoints_dir = checkpoints_dir or 'checkpoints/'
+
+def get_monitored_cnn_session(loss, model_config: cnn.config.ModelConfig):
+    """Creates a MonitoredSession for running the model.
+
+    The monitored session automatically saves and restores from checkpoints,
+    saves summaries, and logs basic info to the terminal. This is useful for
+    monitoring models during long training sessions, and ensuring that they
+    can be saved in case of program failure.
+
+    Args:
+        loss: Loss tensor to track for logging. None to disable logging.
+        model_config: Model configuration.
+
+    Returns:
+        MonitoredSession for running the model.
+    """
+    # Session creator that can restore from checkpoint
     scaffold = tf.train.Scaffold()
     session_creator = tf.train.ChiefSessionCreator(
-        scaffold, checkpoint_dir=checkpoints_dir)
+        scaffold, checkpoint_dir=model_config.checkpoints_dir)
 
+    # Create hooks
     hooks = []
-    if checkpoints_dir and save_checkpoint_secs and save_checkpoint_secs > 0:
-        hooks.append(tf.train.CheckpointSaverHook(checkpoints_dir,
-                                                  save_checkpoint_secs,
-                                                  scaffold=scaffold))
-    if summaries_dir and save_summaries_steps and save_summaries_steps > 0:
-        hooks.append(tf.train.StepCounterHook(save_summaries_steps,
-                                              output_dir=summaries_dir))
-        hooks.append(tf.train.SummarySaverHook(save_summaries_steps,
-                                               output_dir=summaries_dir,
-                                               scaffold=scaffold))
+    if model_config.save_checkpoint_secs > 0:
+        hooks.append(tf.train.CheckpointSaverHook(
+            model_config.checkpoints_dir, model_config.save_checkpoint_secs,
+            scaffold=scaffold))
+    if model_config.save_summaries_steps > 0:
+        hooks.append(tf.train.StepCounterHook(
+            model_config.save_summaries_steps,
+            output_dir=model_config.summaries_dir))
+        hooks.append(tf.train.SummarySaverHook(
+            model_config.save_summaries_steps,
+            output_dir=model_config.summaries_dir, scaffold=scaffold))
     if loss is not None:
         hooks.append(tf.train.NanTensorHook(loss))
-        if (batch_size and batch_size > 0) and (
-                    log_frequency and log_frequency > 0):
-            hooks.append(_LoggerHook(loss, batch_size, log_frequency))
+        if model_config.batch_size > 0 and model_config.print_log_steps > 0:
+            hooks.append(_LoggerHook(loss, model_config.batch_size,
+                                     model_config.print_log_steps))
 
-    return tf.train.MonitoredSession(session_creator, hooks)
+    # Only use hooks for training sessions
+    if model_config.phase == 'train':
+        return tf.train.MonitoredSession(session_creator, hooks)
+    else:
+        return tf.train.MonitoredSession(session_creator)
 
 
+# noinspection PyMissingOrEmptyDocstring
 class _LoggerHook(tf.train.SessionRunHook):
     """Logs runtime and values of specified tensors"""
 

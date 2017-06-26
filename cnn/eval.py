@@ -9,37 +9,40 @@ import tensorflow as tf
 import cnn
 
 
-def evaluate(model_name, image_height, image_width, num_classes, data_dir,
-             checkpoints_dir, num_examples=1000, data_format='NHWC',
-             batch_size=128, num_preprocess_threads=32):
+def evaluate(model_config: cnn.config.ModelConfig):
     """Evaluates most recent checkpoint for accuracy."""
     with tf.Graph().as_default():
         global_step = tf.train.get_or_create_global_step()
         # Preprocessing should occur on CPU for improved performance
         with tf.device('/cpu:0'):
-            images, labels = cnn.preprocessor.get_minibatch(
-                data_dir, batch_size, image_height, image_width, 'test',
-                data_format=data_format, num_threads=num_preprocess_threads)
+            images, labels = cnn.preprocessor.get_minibatch(model_config)
 
-        model = cnn.model.get_model(model_name, batch_size, num_classes)
-        builder = cnn.builder.CNNBuilder(images, 3, False,
-                                         data_format=data_format)
+        model = cnn.model.get_model(model_config)
+        builder = cnn.model.CNNBuilder(images, model_config)
         logits = model.inference(builder)
-        top_k_op = tf.nn.in_top_k(logits, labels, 1)
 
-        num_steps = int(math.ceil(num_examples / batch_size))
-        total_examples = num_steps * batch_size
+        top_1_op = tf.nn.in_top_k(logits, labels, 1)
+        top_3_op = tf.nn.in_top_k(logits, labels, 3)
+
+        num_steps = int(math.ceil(
+            model_config.examples_per_epoch / model_config.batch_size))
+        total_examples = num_steps * model_config.batch_size
         steps = 0
-        num_correct = 0
+        num_correct_1 = 0
+        num_correct_3 = 0
 
         with cnn.monitor.get_monitored_cnn_session(
-                checkpoints_dir, log_frequency=None, save_checkpoint_secs=None,
-                save_summaries_steps=None) as mon_sess:
+                None, model_config) as mon_sess:
             while not mon_sess.should_stop() and steps < num_steps:
-                predictions = mon_sess.run(top_k_op)
-                num_correct += np.sum(predictions)
+                predictions_1, predictions_3 = mon_sess.run(
+                    [top_1_op, top_3_op])
+                num_correct_1 += np.sum(predictions_1)
+                num_correct_3 += np.sum(predictions_3)
                 steps += 1
 
-        precision = num_correct / total_examples
+        precision_1 = num_correct_1 / total_examples
+        precision_3 = num_correct_3 / total_examples
         print("{}: Precision @ 1 = {:.3f}".format(datetime.datetime.now(),
-                                                  precision))
+                                                  precision_1))
+        print("{}: Precision @ 3 = {:.3f}".format(datetime.datetime.now(),
+                                                  precision_3))
