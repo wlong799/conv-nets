@@ -74,6 +74,8 @@ class ModelConfig(object):
         self.padding_mode = self._get_string('padding_mode', ['SAME', 'VALID'])
 
         self.learning_rate = self._get_num('learning_rate', float, 0)
+        self.weight_decay_rate = self._get_num('weight_decay_rate', float, 0)
+        self.ema_decay_rate = self._get_num('ema_decay_rate', float, 0, 1)
 
         self.print_log_steps = self._get_num('print_log_steps', int, 0)
         self.save_checkpoint_secs = self._get_num(

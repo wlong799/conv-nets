@@ -25,6 +25,7 @@ class CNNBuilder(object):
         self.top_layer = input_layer
         self.num_top_channels = model_config.image_channels
         self.is_train_phase = model_config.phase == 'train'
+        self.weight_decay_rate = model_config.weight_decay_rate
         self.padding_mode = model_config.padding_mode
         self.data_format = model_config.data_format
         self.data_type = model_config.data_type
@@ -52,7 +53,8 @@ class CNNBuilder(object):
 
     def convolution(self, num_out_channels, kernel_height, kernel_width,
                     vertical_stride=1, horizontal_stride=1,
-                    activation_method='relu'):
+                    activation_method='relu', decay_kernel=True,
+                    decay_bias=True):
         """Adds a convolutional layer to network.
 
         Args:
@@ -63,6 +65,11 @@ class CNNBuilder(object):
             horizontal_stride: int. Horizontal stride.
             activation_method: string. Specifies which of the available
                                activation methods in _activation() to use.
+            decay_kernel: bool. Whether weight decay regularization should be
+                          applied to filter variable.
+            decay_bias: bool. Whether weight decay regularization should be
+                        applied to bias variable.
+
 
         Returns:
             new_top_layer: Tensor. New top layer of model.
@@ -72,8 +79,10 @@ class CNNBuilder(object):
         with tf.variable_scope(name):
             kernel_shape = [kernel_height, kernel_width, self.num_top_channels,
                             num_out_channels]
+            kernel_decay_rate = self.weight_decay_rate if decay_kernel else 0.0
             kernel = cnn_variable('weights', kernel_shape,
-                                  data_type=self.data_type)
+                                  data_type=self.data_type,
+                                  weight_decay_rate=kernel_decay_rate)
             if self.data_format == 'NHWC':
                 strides = [1, vertical_stride, horizontal_stride, 1]
             else:
@@ -81,8 +90,9 @@ class CNNBuilder(object):
             conv = tf.nn.conv2d(self.top_layer, kernel, strides,
                                 self.padding_mode,
                                 data_format=self.data_format)
+            bias_decay_rate = self.weight_decay_rate if decay_bias else 0.0
             biases = cnn_variable('biases', [num_out_channels], 'zeros',
-                                  self.data_type)
+                                  self.data_type, bias_decay_rate)
             pre_activation = tf.reshape(
                 tf.nn.bias_add(conv, biases, self.data_format),
                 conv.get_shape())
@@ -109,13 +119,18 @@ class CNNBuilder(object):
         self.top_layer = dropped
         return self.top_layer, self.num_top_channels
 
-    def affine(self, num_out_channels, activation_method='relu'):
+    def affine(self, num_out_channels, activation_method='relu',
+               decay_kernel=True, decay_bias=True):
         """Adds a fully connected layer to the network.
 
         Args:
             num_out_channels: int. Number of output neurons.
             activation_method: string. Specifies which of the available
                                activation methods in _activation() to use.
+            decay_kernel: bool. Whether weight decay regularization should be
+                          applied to kernel variable.
+            decay_bias: bool. Whether weight decay regularization should be
+                        applied to bias variable.
 
         Returns:
             new_top_layer: Tensor. New top layer of model.
@@ -124,9 +139,12 @@ class CNNBuilder(object):
         name = self._get_name('affine')
         with tf.variable_scope(name):
             shape = [self.num_top_channels, num_out_channels]
-            kernel = cnn_variable('weights', shape, data_type=self.data_type)
+            kernel_decay_rate = self.weight_decay_rate if decay_kernel else 0.0
+            kernel = cnn_variable('weights', shape, data_type=self.data_type,
+                                  weight_decay_rate=kernel_decay_rate)
+            bias_decay_rate = self.weight_decay_rate if decay_bias else 0.0
             biases = cnn_variable('biases', [num_out_channels], 'zeros',
-                                  self.data_type)
+                                  self.data_type, bias_decay_rate)
             pre_activation = tf.matmul(self.top_layer, kernel) + biases
             affine = _activation(pre_activation, activation_method, name)
             self.top_layer = affine
@@ -213,7 +231,7 @@ class CNNBuilder(object):
 
 
 def cnn_variable(name, shape, init_method='glorot_uniform',
-                 data_type=tf.float32):
+                 data_type=tf.float32, weight_decay_rate=0.0):
     """Creates a variable on the CPU device, with options for initialization.
 
     Args:
@@ -222,6 +240,8 @@ def cnn_variable(name, shape, init_method='glorot_uniform',
         init_method: string. Specifies which initialization method to use,
                      as available in _initializer().
         data_type: Data type in output variable.
+        weight_decay_rate: bool. Decay rate for weights of variable, or 0.0 if
+                           weight decay should not be applied.
 
     Returns:
         A variable placed on the CPU with the specified parameters.
@@ -231,6 +251,10 @@ def cnn_variable(name, shape, init_method='glorot_uniform',
     with tf.device('/cpu:0'):
         initializer = _initializer(shape, data_type, init_method)
         variable = tf.get_variable(name, shape, data_type, initializer)
+    if weight_decay_rate:
+        weight_decay = tf.multiply(tf.nn.l2_loss(variable), weight_decay_rate,
+                                   'weight_loss')
+        tf.add_to_collection('losses', weight_decay)
     return variable
 
 
