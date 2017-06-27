@@ -31,8 +31,7 @@ def evaluate(model_config: cnn.config.ModelConfig):
         num_correct_1 = 0
         num_correct_3 = 0
 
-        with cnn.monitor.get_monitored_cnn_session(
-                None, model_config) as mon_sess:
+        with cnn.monitor.get_monitored_cnn_session(model_config) as mon_sess:
             while not mon_sess.should_stop() and steps < num_steps:
                 predictions_1, predictions_3 = mon_sess.run(
                     [top_1_op, top_3_op])

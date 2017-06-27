@@ -97,6 +97,10 @@ class CNNBuilder(object):
                 tf.nn.bias_add(conv, biases, self.data_format),
                 conv.get_shape())
             conv1 = _activation(pre_activation, activation_method, name)
+
+            tf.summary.histogram('activations', conv1)
+            tf.summary.scalar('sparsity', tf.nn.zero_fraction(conv1))
+
             self.top_layer = conv1
             self.num_top_channels = num_out_channels
             return self.top_layer, self.num_top_channels
@@ -147,6 +151,10 @@ class CNNBuilder(object):
                                   self.data_type, bias_decay_rate)
             pre_activation = tf.matmul(self.top_layer, kernel) + biases
             affine = _activation(pre_activation, activation_method, name)
+
+            tf.summary.histogram('activations', affine)
+            tf.summary.scalar('sparsity', tf.nn.zero_fraction(affine))
+
             self.top_layer = affine
             self.num_top_channels = num_out_channels
             return self.top_layer, self.num_top_channels
@@ -253,7 +261,7 @@ def cnn_variable(name, shape, init_method='glorot_uniform',
         variable = tf.get_variable(name, shape, data_type, initializer)
     if weight_decay_rate:
         weight_decay = tf.multiply(tf.nn.l2_loss(variable), weight_decay_rate,
-                                   'weight_loss')
+                                   '{}/decay_loss'.format(name))
         tf.add_to_collection('losses', weight_decay)
     return variable
 

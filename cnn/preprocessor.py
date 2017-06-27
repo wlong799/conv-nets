@@ -57,9 +57,9 @@ def get_minibatch(model_config: cnn.config.ModelConfig):
             image, model_config.image_height, model_config.image_width,
             model_config.image_channels, use_distortions)
 
-        # Add summaries
-        tf.summary.image('original_image', tf.expand_dims(image, 0))
-        tf.summary.image('processed_image', tf.expand_dims(processed_image, 0))
+        # Add image summaries
+        tf.summary.image('original', tf.expand_dims(image, 0), 1)
+        tf.summary.image('processed', tf.expand_dims(processed_image, 0), 1)
 
         # Set up queue of example batches
         capacity = (model_config.min_buffer_size +

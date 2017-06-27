@@ -22,7 +22,7 @@ def train(model_config: cnn.config.ModelConfig):
 
         total_loss = get_total_loss(logits, labels)
         loss_averages = tf.train.ExponentialMovingAverage(
-            model_config.ema_decay_rate, name='moving_average')
+            model_config.ema_decay_rate, global_step, name='loss_avg')
         loss_averages_op = loss_averages.apply(
             tf.get_collection('losses') + [total_loss])
         for loss in tf.get_collection('losses') + [total_loss]:
@@ -36,10 +36,23 @@ def train(model_config: cnn.config.ModelConfig):
 
         apply_grad_op = opt.apply_gradients(grads, global_step)
 
-        with cnn.monitor.get_monitored_cnn_session(
-                total_loss, model_config) as mon_sess:
+        for grad, var in grads:
+            if grad is not None:
+                tf.summary.histogram('{}/values'.format(var.op.name), var)
+                tf.summary.histogram('{}/gradients'.format(var.op.name), grad)
+
+        variable_averages = tf.train.ExponentialMovingAverage(
+            model_config.ema_decay_rate, global_step, name='var_avg')
+        variable_averages_op = variable_averages.apply(
+            tf.trainable_variables())
+
+        with tf.control_dependencies([apply_grad_op, variable_averages_op]):
+            train_op = tf.no_op(name=model_config.phase)
+
+        with cnn.monitor.get_monitored_cnn_session(model_config, total_loss,
+                                                   global_step) as mon_sess:
             while not mon_sess.should_stop():
-                mon_sess.run(apply_grad_op)
+                mon_sess.run(train_op)
 
 
 def get_total_loss(logits, labels):
