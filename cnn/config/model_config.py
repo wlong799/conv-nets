@@ -77,6 +77,14 @@ class ModelConfig(object):
         self.weight_decay_rate = self._get_num('weight_decay_rate', float, 0)
         self.ema_decay_rate = self._get_num('ema_decay_rate', float, 0, 1)
 
+        self.test_set_fraction = self._get_num(
+            'test_set_fraction', float, 0, 1)
+        self.restore_moving_averages = self._get_bool(
+            'restore_moving_averages')
+        self.top_k_tests = [int(num) for num in
+                            self._get_string('top_k_tests').split(',')]
+
+        self.log_device_placement = self._get_bool('log_device_placement')
         self.print_log_steps = self._get_num('print_log_steps', int, 0)
         self.save_checkpoint_secs = self._get_num(
             'save_checkpoint_secs', int, 0)
