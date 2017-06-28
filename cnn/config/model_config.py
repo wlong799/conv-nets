@@ -40,7 +40,7 @@ class ModelConfig(object):
             custom_config_section = custom_config_section or \
                                     DEFAULT_CONFIG_SECTION
             self._load_config(custom_config_file, custom_config_section)
-        self._config_dict.update(**kwargs)
+        self._config_dict.update({key: str(kwargs[key]) for key in kwargs})
 
         # Check parameter validity and convert to appropriate type
         self.phase = self._get_string('phase', ['train', 'test', 'valid'])
@@ -73,7 +73,10 @@ class ModelConfig(object):
         self.model_type = self._get_string('model_type', ['simple'])
         self.padding_mode = self._get_string('padding_mode', ['SAME', 'VALID'])
 
-        self.learning_rate = self._get_num('learning_rate', float, 0)
+        self.init_learning_rate = self._get_num('init_learning_rate', float, 0)
+        self.learning_decay_rate = self._get_num('learning_decay_rate',
+                                                 float, 0, 1)
+        self.epochs_per_decay = self._get_num('epochs_per_decay', int, 1)
         self.weight_decay_rate = self._get_num('weight_decay_rate', float, 0)
         self.ema_decay_rate = self._get_num('ema_decay_rate', float, 0, 1)
 
@@ -90,6 +93,8 @@ class ModelConfig(object):
             'save_checkpoint_secs', int, 0)
         self.save_summaries_steps = self._get_num(
             'save_summaries_steps', int, 0)
+
+        self.num_gpus = self._get_num('num_gpus', int, 0)
 
     def _load_config(self, config_file, config_section):
         config = configparser.ConfigParser(allow_no_value=True)

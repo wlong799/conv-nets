@@ -96,10 +96,9 @@ class CNNBuilder(object):
             pre_activation = tf.reshape(
                 tf.nn.bias_add(conv, biases, self.data_format),
                 conv.get_shape())
-            conv1 = _activation(pre_activation, activation_method, name)
+            conv1 = _activation(pre_activation, activation_method)
 
-            tf.summary.histogram('activations', conv1)
-            tf.summary.scalar('sparsity', tf.nn.zero_fraction(conv1))
+            tf.add_to_collection('activations', conv1)
 
             self.top_layer = conv1
             self.num_top_channels = num_out_channels
@@ -150,10 +149,9 @@ class CNNBuilder(object):
             biases = cnn_variable('biases', [num_out_channels], 'zeros',
                                   self.data_type, bias_decay_rate)
             pre_activation = tf.matmul(self.top_layer, kernel) + biases
-            affine = _activation(pre_activation, activation_method, name)
+            affine = _activation(pre_activation, activation_method)
 
-            tf.summary.histogram('activations', affine)
-            tf.summary.scalar('sparsity', tf.nn.zero_fraction(affine))
+            tf.add_to_collection('activations', affine)
 
             self.top_layer = affine
             self.num_top_channels = num_out_channels
