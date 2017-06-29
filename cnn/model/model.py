@@ -1,13 +1,15 @@
 # coding=utf-8
 """Contains Model, a superclass for CNN model architectures"""
-import cnn
+
+from .builder import CNNBuilder
 
 
 class Model(object):
     """Superclass for all CNN model architectures.
 
     Classes that subclass model will override its inference method,
-    to describe their own unique architectures.
+    to describe their own unique architectures. Subclasses should be placed
+    in the cnn.model.implementations package.
     """
 
     def __init__(self, name, batch_size, num_classes):
@@ -16,7 +18,7 @@ class Model(object):
         self.num_classes = num_classes
 
     # noinspection PyMethodMayBeStatic
-    def inference(self, cnn_builder):
+    def inference(self, cnn_builder: CNNBuilder):
         """Builds network to perform inference.
 
         Args:
@@ -30,19 +32,3 @@ class Model(object):
                          will perform this step itself.
         """
         raise ValueError("Inference must be implemented in derived classes.")
-
-
-def get_model(model_config: cnn.config.ModelConfig):
-    """Returns model using the specified configuration. Should be edited as
-    more model types are made available."""
-    from cnn.model.simple_model import SimpleModel
-    try:
-        model = {
-            'simple': SimpleModel(model_config.batch_size,
-                                  model_config.num_classes)
-        }[model_config.model_type]
-    except KeyError as e:
-        e.args = e.args or ('',)
-        e.args += ("Model '{}' not available.".format(model_config.model_type))
-        raise
-    return model

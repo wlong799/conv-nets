@@ -7,6 +7,7 @@ import numpy as np
 import tensorflow as tf
 
 import cnn
+import cnn.model.implementations.model_selection
 
 
 def evaluate(model_config: cnn.config.ModelConfig):
@@ -29,14 +30,20 @@ def evaluate(model_config: cnn.config.ModelConfig):
             images, labels = cnn.preprocessor.get_minibatch(model_config)
 
         # Run model
-        model = cnn.model.get_model(model_config)
-        builder = cnn.model.CNNBuilder(images, model_config)
+        model = cnn.model.get_model(model_config.model_type,
+                                    model_config.batch_size,
+                                    model_config.num_classes)
+        builder = cnn.model.CNNBuilder(
+            images, model_config.image_channels, False,
+            model_config.weight_decay_rate, model_config.padding_mode,
+            model_config.data_format, model_config.data_type)
         logits = model.inference(builder)
 
         # Set up variable restore using moving averages for better predictions
         if model_config.restore_moving_averages:
             variable_averages = tf.train.ExponentialMovingAverage(
-                model_config.ema_decay_rate, global_step, name='var_avg')
+                model_config.moving_avg_decay_rate, global_step,
+                name='var_avg')
             variables_to_restore = variable_averages.variables_to_restore()
             saver = tf.train.Saver(variables_to_restore)
         else:
@@ -47,7 +54,7 @@ def evaluate(model_config: cnn.config.ModelConfig):
                          model_config.top_k_tests}
         num_correct_dict = {k: 0 for k in model_config.top_k_tests}
         num_test_examples = (model_config.examples_per_epoch *
-                             model_config.test_set_fraction)
+                             model_config.eval_set_fraction)
         num_steps = int(math.ceil(num_test_examples / model_config.batch_size))
         total_examples = num_steps * model_config.batch_size
         steps = 0

@@ -8,14 +8,14 @@ import tensorflow as tf
 
 
 def int64_feature(value):
-    """Wraps value in a TensorFlow Feature to be stored in a TFRecords file."""
+    """Wraps value in an int Feature to be stored in a TFRecords file."""
     if not isinstance(value, list):
         value = [value]
     return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
 
 
 def bytes_feature(value):
-    """Wraps value in a TensorFlow Feature to be stored in a TFRecords file."""
+    """Wraps value in a bytes Feature to be stored in a TFRecords file."""
     if not isinstance(value, list):
         value = [value]
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))
@@ -31,10 +31,17 @@ class ImageCoder(object):
         # Converts 3D uint8 Tensor (RGB image) to encoded PNG string
         self._image_data = tf.placeholder(tf.uint8)
         self._encode_png = tf.image.encode_png(self._image_data)
+        self._encode_jpeg = tf.image.encode_jpeg(self._image_data)
 
     def encode_png(self, image_data):
         """Runs session to get evaluated PNG string encoding."""
         image = self._sess.run(self._encode_png,
+                               feed_dict={self._image_data: image_data})
+        return image
+
+    def encode_jpeg(self, image_data):
+        """Runs session to get evaluated JPG string encoding."""
+        image = self._sess.run(self._encode_jpeg,
                                feed_dict={self._image_data: image_data})
         return image
 
@@ -55,6 +62,7 @@ def download_dataset(download_urls, dest_dir, verbose=True):
         filepath = os.path.join(dest_dir, filename)
         # Download file only if it hasn't been already
         if not os.path.exists(filepath):
+            # Log download progress
             def _download_progress(count, block_size, total_size):
                 percent_complete = count * block_size / total_size * 100.0
                 prog = '\r>> Downloading file {} ({} of {})... {:>4.1f}% ' \
@@ -75,6 +83,3 @@ def download_dataset(download_urls, dest_dir, verbose=True):
             if verbose:
                 print('\r>> Skipped file {} ({} of {})... already downloaded'
                       .format(filename, i + 1, len(download_urls)))
-
-
-

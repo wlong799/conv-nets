@@ -1,17 +1,16 @@
 # coding=utf-8
-"""Simple model designed for classifying small images (e.g. MNIST or
-CIFAR-10 datasets."""
+"""Simple CNN for classifying small images (e.g. CIFAR-10 dataset)."""
 
-import cnn
+from ..model import Model, CNNBuilder
 
 
-class SimpleModel(cnn.model.Model):
+class SimpleModel(Model):
     """Simple CNN model."""
 
     def __init__(self, batch_size, num_classes):
         super(SimpleModel, self).__init__('simple', batch_size, num_classes)
 
-    def inference(self, cnn_builder):
+    def inference(self, cnn_builder: CNNBuilder):
         """Simple CNN with convolution, pooling, and normalization."""
         cnn_builder.convolution(64, 3, 3)
         cnn_builder.convolution(64, 3, 3)

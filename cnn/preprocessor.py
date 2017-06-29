@@ -40,8 +40,6 @@ def get_minibatch(model_config: cnn.config.ModelConfig):
                      0-9, corresponding to the class of the images in
                      image_batch.
     """
-    if model_config.phase not in ['train', 'valid', 'test']:
-        raise ValueError("Phase must be one of 'train', 'valid', or 'test'")
     with tf.name_scope('{}_batch_preprocessing'.format(model_config.phase)):
         # Add proper TFRecord files to queue
         pattern = '*{}*.tfrecords'.format(model_config.phase)
@@ -106,14 +104,14 @@ def _parse_cifar10_example(filename_queue):
 
 def process_image(image, image_height, image_width, image_channels,
                   use_distortions):
-    """Applies processing steps to the raw input image.
+    """Applies preprocessing steps to the raw input image.
 
     Args:
         image: 3D uint8 Tensor representing image. Either grayscale or RGB.
         image_height: int. Height of processed image.
         image_width: int. Width of processed image.
         image_channels: int. Number of channels in image.
-        use_distortions: bool. Whether random distortion steps should be applied.
+        use_distortions: bool. Whether random distortion steps should be used.
     Returns:
         processed_image: float32 image Tensor [image_height, image_width, 3].
     """

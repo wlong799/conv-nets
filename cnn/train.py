@@ -5,6 +5,7 @@ import re
 import tensorflow as tf
 
 import cnn
+import cnn.model.implementations.model_selection
 
 
 def train(model_config: cnn.config.ModelConfig):
@@ -28,7 +29,9 @@ def train(model_config: cnn.config.ModelConfig):
         # Initialize model-wide variables
         global_step = tf.train.get_or_create_global_step()
         optimizer = _create_optimizer(model_config, global_step)
-        model = cnn.model.get_model(model_config)
+        model = cnn.model.implementations.model_selection.get_model(
+            model_config.model_type, model_config.batch_size,
+            model_config.num_classes)
 
         # Set up prefetch queue for examples to be accessible by all devices
         with tf.name_scope('data_input'):
@@ -38,10 +41,15 @@ def train(model_config: cnn.config.ModelConfig):
 
         # Run inference for a batch on each available device in parallel
         device_gradients = []
+        total_losses = []
         with tf.variable_scope(tf.get_variable_scope()):
             for device, device_name in zip(devices, device_names):
                 images, labels = prefetch_queue.dequeue()
-                cnn_builder = cnn.model.CNNBuilder(images, model_config)
+                cnn_builder = cnn.model.CNNBuilder(
+                    images, model_config.image_channels, True,
+                    model_config.weight_decay_rate,
+                    model_config.padding_mode, model_config.data_format,
+                    model_config.data_type)
                 # Place only computationally expensive inference step on device
                 with tf.device(device), tf.name_scope(device_name) as scope:
                     logits = model.inference(cnn_builder)
@@ -49,6 +57,7 @@ def train(model_config: cnn.config.ModelConfig):
                     gradients = optimizer.compute_gradients(total_loss)
                     tf.get_variable_scope().reuse_variables()
                     device_gradients.append(gradients)
+                    total_losses.append(total_loss)
 
         _add_loss_summaries(device_names)
         _add_activation_summaries(device_names)
@@ -62,10 +71,11 @@ def train(model_config: cnn.config.ModelConfig):
 
         # Track variable moving averages for better predictions
         variable_averages = tf.train.ExponentialMovingAverage(
-            model_config.ema_decay_rate, global_step, name='var_avg')
+            model_config.moving_avg_decay_rate, global_step, name='var_avg')
         variable_averages_op = variable_averages.apply(
             tf.trainable_variables())
 
+        total_loss = tf.reduce_mean(total_losses)
         train_op = tf.group(apply_grad_op, variable_averages_op)
         with cnn.monitor.get_monitored_cnn_session(model_config, total_loss,
                                                    global_step) as mon_sess:

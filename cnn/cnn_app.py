@@ -5,7 +5,7 @@ import cnn
 
 def run(config_file=None, config_section=None, **kwargs):
     """Creates a new ModelConfig using the specified configuration file and
-    keyword parameters, and runs the appropriate model. """
+    keyword parameters, and runs the appropriate model."""
     model_config = cnn.config.ModelConfig(config_file, config_section,
                                           **kwargs)
     if model_config.phase == 'train':

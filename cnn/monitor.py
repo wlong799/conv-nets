@@ -29,10 +29,12 @@ def get_monitored_cnn_session(model_config: cnn.config.ModelConfig,
     Returns:
         MonitoredSession for running the model.
     """
-    # Session creator restores from checkpoint with option for custom restores
+    # Allow soft placement for operations to be placed on proper device
+    # Turn log device placement on to debug device use
     config = tf.ConfigProto(
         allow_soft_placement=True,
         log_device_placement=model_config.log_device_placement)
+    # Session creator restores from checkpoint with option for custom restores
     scaffold = tf.train.Scaffold(saver=saver)
     session_creator = tf.train.ChiefSessionCreator(
         scaffold, config=config, checkpoint_dir=model_config.checkpoints_dir)
@@ -69,7 +71,7 @@ def get_monitored_cnn_session(model_config: cnn.config.ModelConfig,
 
 # noinspection PyMissingOrEmptyDocstring
 class _LoggerHook(tf.train.SessionRunHook):
-    """Logs runtime and values of specified tensors"""
+    """Logs run speed and value of loss tensor to terminal."""
 
     def __init__(self, loss, global_step, batch_size, log_frequency):
         self.loss = loss
