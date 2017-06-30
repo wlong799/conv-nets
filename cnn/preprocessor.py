@@ -13,7 +13,7 @@ dequeue the labeled examples one batch at a time.
 import functools
 import os
 import random
-
+import glob
 import tensorflow as tf
 
 import cnn
@@ -44,8 +44,8 @@ def get_minibatch(model_config: cnn.config.ModelConfig):
         # Add proper TFRecord files to queue
         pattern = '*{}*.tfrecords'.format(model_config.phase)
         pattern = os.path.join(model_config.data_dir, pattern)
-        filename_queue = tf.train.string_input_producer(
-            tf.train.match_filenames_once(pattern))
+        # tf.train.match_filenames_once() causes issues with variable restore
+        filename_queue = tf.train.string_input_producer(glob.glob(pattern))
 
         # Parse an image and apply preprocessing steps
         image, label = _parse_cifar10_example(filename_queue)

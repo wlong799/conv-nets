@@ -7,7 +7,6 @@ import numpy as np
 import tensorflow as tf
 
 import cnn
-import cnn.model.implementations.model_selection
 
 
 def evaluate(model_config: cnn.config.ModelConfig):
@@ -23,7 +22,7 @@ def evaluate(model_config: cnn.config.ModelConfig):
         model_config: Model configuration.
     """
     with tf.Graph().as_default():
-        global_step = tf.train.get_or_create_global_step()
+        global_step = cnn.compat_utils.get_or_create_global_step()
 
         # Preprocessing should occur on CPU for improved performance
         with tf.device('/cpu:0'):
@@ -48,7 +47,6 @@ def evaluate(model_config: cnn.config.ModelConfig):
             saver = tf.train.Saver(variables_to_restore)
         else:
             saver = None
-
         # Set up in_top_k testing for each specified value of k
         top_k_op_dict = {k: tf.nn.in_top_k(logits, labels, k) for k in
                          model_config.top_k_tests}

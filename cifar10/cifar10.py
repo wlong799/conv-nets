@@ -91,5 +91,6 @@ def create_cifar10_record_from_binaries(record_filename, data_filenames):
 
 
 if __name__ == '__main__':
-    # cnn.cnn_app.run('cifar10.ini', phase='test', examples_per_epoch=10000)
-    cnn.cnn_app.run('cifar10.ini', phase='train', examples_per_epoch='50000')
+    create_cifar10_datasets('data/')
+    cnn.cnn_app.run('cifar10.ini', phase='test', examples_per_epoch='10000')
+    # cnn.cnn_app.run('cifar10.ini', phase='train', examples_per_epoch='50000')

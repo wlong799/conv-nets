@@ -27,7 +27,7 @@ def train(model_config: cnn.config.ModelConfig):
                     device in devices]  # /cpu:0 -> CPU_0, /gpu:1 -> GPU_1, etc
     with tf.Graph().as_default(), tf.device('/cpu:0'):
         # Initialize model-wide variables
-        global_step = tf.train.get_or_create_global_step()
+        global_step = cnn.compat_utils.get_or_create_global_step()
         optimizer = _create_optimizer(model_config, global_step)
         model = cnn.model.implementations.model_selection.get_model(
             model_config.model_type, model_config.batch_size,
