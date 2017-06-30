@@ -59,7 +59,8 @@ def get_monitored_cnn_session(model_config: cnn.config.ModelConfig,
         hooks.append(tf.train.NanTensorHook(loss))
         if model_config.batch_size > 0 and model_config.print_log_steps > 0:
             hooks.append(
-                _LoggerHook(loss, global_step, model_config.batch_size,
+                _LoggerHook(loss, global_step, model_config.batch_size *
+                            (model_config.num_gpus or 1),
                             model_config.print_log_steps))
 
     # Only use hooks for training sessions
@@ -73,10 +74,10 @@ def get_monitored_cnn_session(model_config: cnn.config.ModelConfig,
 class _LoggerHook(tf.train.SessionRunHook):
     """Logs run speed and value of loss tensor to terminal."""
 
-    def __init__(self, loss, global_step, batch_size, log_frequency):
+    def __init__(self, loss, global_step, examples_per_step, log_frequency):
         self.loss = loss
         self.global_step = global_step
-        self.batch_size = batch_size
+        self.examples_per_step = examples_per_step
         self.log_frequency = log_frequency
         self.start_time = time.time()
 
@@ -93,10 +94,11 @@ class _LoggerHook(tf.train.SessionRunHook):
             duration = current_time - self.start_time
             self.start_time = current_time
 
-            examples_per_sec = self.log_frequency * self.batch_size / duration
-            secs_per_batch = float(duration / self.log_frequency)
+            examples_per_sec = (self.log_frequency *
+                                self.examples_per_step / duration)
+            secs_per_step = float(duration / self.log_frequency)
             format_str = '{}: step {} | Loss = {:.2f} | ' \
-                         '{:.1f} examples/second | {:.3f} seconds/batch)'
+                         '{:.1f} examples/second | {:.3f} seconds/step)'
             print(format_str.format(datetime.datetime.now(), global_step_value,
                                     loss_value, examples_per_sec,
-                                    secs_per_batch))
+                                    secs_per_step))

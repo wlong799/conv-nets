@@ -3,6 +3,7 @@
 import os
 import shutil
 import struct
+import sys
 import tarfile
 
 import numpy as np
@@ -91,6 +92,9 @@ def create_cifar10_record_from_binaries(record_filename, data_filenames):
 
 
 if __name__ == '__main__':
+    config_section = sys.argv[1]
+    phase = sys.argv[2]
+    examples_per_epoch = '50000' if phase == 'train' else '10000'
     create_cifar10_datasets('data/')
-    cnn.cnn_app.run('cifar10.ini', phase='test', examples_per_epoch='10000')
-    # cnn.cnn_app.run('cifar10.ini', phase='train', examples_per_epoch='50000')
+    cnn.cnn_app.run('cifar10.ini', config_section,
+                    phase=phase, examples_per_epoch=examples_per_epoch)

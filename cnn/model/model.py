@@ -21,6 +21,18 @@ class Model(object):
     def inference(self, cnn_builder: CNNBuilder):
         """Builds network to perform inference.
 
+        Using CNNBuilder makes it easy to describe the model on a layer by
+        layer basis. CNNBuilder will automatically connect the layers and
+        perform all the background steps of data formatting, activation
+        functions, etc. For instance, the following would be a valid model
+        to specify in inference():
+
+        cnn_builder.convolution(64, 3, 3)
+        cnn_builder.max_pooling(3, 3)
+        cnn_builder.normalization()
+        cnn_builder.reshape([self.batch_size, -1])
+        logits, _ = cnn_builder.affine(self.num_classes)
+
         Args:
             cnn_builder: CNNBuilder class to use for building the network.
 
