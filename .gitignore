@@ -1,5 +1,8 @@
 .idea/
 
+__pycache__
+
 /cifar10/data/
 /cifar10/summaries/
 /cifar10/checkpoints/
+
