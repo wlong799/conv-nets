@@ -22,6 +22,7 @@ def evaluate(model_config: cnn.config.ModelConfig):
         model_config: Model configuration.
     """
     with tf.Graph().as_default():
+        # Set up model
         global_step = cnn.compat_utils.get_or_create_global_step()
         dataset = cnn.input.get_dataset(model_config.dataset_name,
                                         model_config.data_dir,
@@ -56,32 +57,34 @@ def evaluate(model_config: cnn.config.ModelConfig):
         # Set up in_top_k testing for each specified value of k
         top_k_op_dict = {k: tf.nn.in_top_k(logits, labels, k) for k in
                          model_config.top_k_tests}
-        num_correct_dict = {k: 0 for k in model_config.top_k_tests}
-        num_test_examples = (dataset.examples_per_epoch(model_config.phase) *
-                             model_config.eval_set_fraction)
-        num_steps = int(math.ceil(num_test_examples / model_config.batch_size))
-        total_examples = num_steps * model_config.batch_size
-        steps = 0
 
         # Obtain precisions at each value of k and print results
-        time = datetime.datetime.now()
-        with cnn.monitor.get_monitored_cnn_session(
-                model_config, saver=saver) as mon_sess:
-            while not mon_sess.should_stop() and steps < num_steps:
-                run_correct_dict = dict(zip(
-                    model_config.top_k_tests,
-                    mon_sess.run([top_k_op_dict[k] for k in
-                                  model_config.top_k_tests])))
-                for k in run_correct_dict:
-                    num_correct_dict[k] += np.sum(run_correct_dict[k])
-                steps += 1
-                print("\r{}: Testing on {} examples... {:5.1f}% Complete".
-                      format(time, total_examples, steps / num_steps * 100),
-                      end='')
+        # time = datetime.datetime.now()
+        while True:
+            num_steps = int(dataset.examples_per_epoch(model_config.phase) *
+                            model_config.eval_set_fraction /
+                            model_config.batch_size)
+            num_examples = num_steps * model_config.batch_size
+            session = cnn.monitor.get_monitored_cnn_session(model_config,
+                                                            saver=saver)
+            _eval_once(top_k_op_dict, num_steps, num_examples, session)
 
-        print()
-        precision_dict = {k: num_correct_dict[k] / total_examples for k in
-                          num_correct_dict}
-        for k in precision_dict:
-            print("{}: Predictions in Top {:>2} = {:>4.1f}%".format(
-                datetime.datetime.now(), k, precision_dict[k] * 100))
+
+def _eval_once(top_k_op_dict, num_steps, num_examples, session):
+    top_k_tests = [key for key in top_k_op_dict]
+    num_correct_dict = {k: 0 for k in top_k_tests}
+    steps = 0
+    with session as mon_sess:
+        while not mon_sess.should_stop() and steps < num_steps:
+            run_correct_dict = dict(zip(
+                top_k_tests,
+                mon_sess.run([top_k_op_dict[k] for k in
+                              top_k_tests])))
+            for k in run_correct_dict:
+                num_correct_dict[k] += np.sum(run_correct_dict[k])
+            steps += 1
+    precision_dict = {k: num_correct_dict[k] / num_examples for k in
+                      num_correct_dict}
+    for k in precision_dict:
+        print("{}: Predictions in Top {:>2} = {:>4.1f}%".format(
+            datetime.datetime.now(), k, precision_dict[k] * 100))

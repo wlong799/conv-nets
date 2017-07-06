@@ -2,7 +2,6 @@
 
 __pycache__
 
-/cifar10/data/
-/cifar10/summaries/
-/cifar10/checkpoints/
-
+/cifar10
+!/cifar10/cifar10.ini
+!/cifar10/cifar10.py

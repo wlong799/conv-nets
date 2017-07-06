@@ -63,14 +63,9 @@ def get_minibatch(dataset: Dataset, phase, batch_size, distort_images,
         min_buffer_size = int(dataset.examples_per_epoch(phase) *
                               min_example_fraction)
         capacity = min_buffer_size + num_preprocessing_threads * batch_size
-        if phase == 'train':
-            image_batch, label_batch = tf.train.shuffle_batch(
-                [processed_image, label], batch_size, capacity,
-                min_buffer_size, num_preprocessing_threads)
-        else:
-            image_batch, label_batch = tf.train.batch(
-                [processed_image, label], batch_size,
-                num_preprocessing_threads, capacity)
+        image_batch, label_batch = tf.train.shuffle_batch(
+            [processed_image, label], batch_size, capacity,
+            min_buffer_size, num_preprocessing_threads)
         if data_format == 'NCHW':
             image_batch = tf.transpose(image_batch, [0, 3, 1, 2])
         return image_batch, label_batch
