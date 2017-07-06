@@ -56,12 +56,10 @@ class ModelConfig(object):
             self._config_dict[key] = val
 
         # Check parameter validity and convert to appropriate type
+        self.dataset_name = self._get_string('dataset_name')
         self.phase = self._get_string('phase', ['train', 'test', 'valid'])
-        self.examples_per_epoch = self._get_num('examples_per_epoch', int, 1)
-        self.image_height = self._get_num('image_height', int, 1)
-        self.image_width = self._get_num('image_width', int, 1)
-        self.image_channels = self._get_num('image_channels', int, 1, 4)
-        self.num_classes = self._get_num('num_classes', int, 1)
+        self.model_type = self._get_string('model_type')
+        self.padding_mode = self._get_string('padding_mode', ['SAME', 'VALID'])
 
         self.data_dir = self._get_string('data_dir')
         self.checkpoints_dir = self._get_string('checkpoints_dir')
@@ -71,19 +69,14 @@ class ModelConfig(object):
         self.distort_images = self._get_bool('distort_images')
         self.num_preprocessing_threads = self._get_num(
             'num_preprocessing_threads', int, 1)
-        min_example_fraction = self._get_num(
+        self.min_example_fraction = self._get_num(
             'min_example_fraction', float, 0, 1)
-        self.min_buffer_size = int(min_example_fraction *
-                                   self.examples_per_epoch)
         self.data_format = self._get_string('data_format', ['NHWC', 'NCHW'])
         data_type_str = self._get_string(
             'data_type', ['float16', 'float32', 'float64'])
         self.data_type = data_type_str == 'float16' and tf.float16 or \
                          data_type_str == 'float32' and tf.float32 or \
                          data_type_str == 'float64' and tf.float64
-
-        self.model_type = self._get_string('model_type')
-        self.padding_mode = self._get_string('padding_mode', ['SAME', 'VALID'])
 
         self.num_gpus = self._get_num('num_gpus', int, 0)
 

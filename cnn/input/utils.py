@@ -7,18 +7,26 @@ import urllib.request
 import tensorflow as tf
 
 
+def bytes_feature(value):
+    """Wraps value in a bytes Feature to be stored in a TFRecords file."""
+    if not isinstance(value, list):
+        value = [value]
+    value = [tf.compat.as_bytes(val) for val in value]
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))
+
+
+def float_feature(value):
+    """Wraps value in a float Feature to be stored in a TFRecords file."""
+    if not isinstance(value, list):
+        value = [value]
+    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
+
+
 def int64_feature(value):
     """Wraps value in an int Feature to be stored in a TFRecords file."""
     if not isinstance(value, list):
         value = [value]
     return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
-
-
-def bytes_feature(value):
-    """Wraps value in a bytes Feature to be stored in a TFRecords file."""
-    if not isinstance(value, list):
-        value = [value]
-    return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))
 
 
 class ImageCoder(object):
@@ -54,7 +62,6 @@ def download_dataset(download_urls, dest_dir, verbose=True):
         dest_dir: Destination directory to download files to.
         verbose: bool. Whether or not to show download progress.
     """
-    # TODO: Make function Python 2 compatible
     if not os.path.exists(dest_dir):
         os.makedirs(dest_dir)
     for i, url in enumerate(download_urls):
@@ -65,10 +72,11 @@ def download_dataset(download_urls, dest_dir, verbose=True):
             # Log download progress
             def _download_progress(count, block_size, total_size):
                 percent_complete = count * block_size / total_size * 100.0
-                prog = '\r>> Downloading file {} ({} of {})... {:>4.1f}% ' \
-                       'complete'.format(filename, i + 1, len(download_urls),
-                                         percent_complete)
-                sys.stderr.write(prog)
+                progress = \
+                    '\r>> Downloading file {} ({} of {})... {:>4.1f}% ' \
+                    'complete'.format(filename, i + 1, len(download_urls),
+                                      percent_complete)
+                sys.stderr.write(progress)
 
             if not verbose:
                 _download_progress = None
