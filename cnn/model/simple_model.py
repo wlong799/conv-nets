@@ -1,7 +1,8 @@
 # coding=utf-8
 """Simple CNN for classifying small images (e.g. CIFAR-10 dataset)."""
 
-from ..model import Model, CNNBuilder
+from .model import Model
+from .builder import CNNBuilder
 
 
 class SimpleModel(Model):

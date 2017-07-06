@@ -1,15 +1,14 @@
 # coding=utf-8
-"""Contains Model, a superclass for CNN model architectures"""
-
+"""Contains Model, an abstract superclass for CNN model architectures"""
+import abc
 from .builder import CNNBuilder
 
 
-class Model(object):
-    """Superclass for all CNN model architectures.
+class Model(metaclass=abc.ABCMeta):
+    """Abstract superclass for all CNN model architectures.
 
     Classes that subclass model will override its inference method,
-    to describe their own unique architectures. Subclasses should be placed
-    in the cnn.model.implementations package.
+    to describe their own unique architectures.
     """
 
     def __init__(self, name, batch_size, num_classes):
@@ -18,6 +17,7 @@ class Model(object):
         self.num_classes = num_classes
 
     # noinspection PyMethodMayBeStatic
+    @abc.abstractmethod
     def inference(self, cnn_builder: CNNBuilder):
         """Builds network to perform inference.
 
@@ -43,4 +43,4 @@ class Model(object):
                          should be applied to this layer, as the loss function
                          will perform this step itself.
         """
-        raise ValueError("Inference must be implemented in derived classes.")
+        pass
