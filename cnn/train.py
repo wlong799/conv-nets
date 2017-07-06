@@ -5,7 +5,7 @@ import re
 import tensorflow as tf
 
 import cnn
-import cnn.model.implementations.model_selection
+import cnn.model.model_selection
 
 
 def train(model_config: cnn.config.ModelConfig):
@@ -28,14 +28,23 @@ def train(model_config: cnn.config.ModelConfig):
     with tf.Graph().as_default(), tf.device('/cpu:0'):
         # Initialize model-wide variables
         global_step = cnn.compat_utils.get_or_create_global_step()
-        optimizer = _create_optimizer(model_config, global_step)
-        model = cnn.model.implementations.model_selection.get_model(
+        dataset = cnn.input.get_dataset(
+            model_config.dataset_name, model_config.data_dir,
+            model_config.overwrite)
+        model = cnn.model.get_model(
             model_config.model_type, model_config.batch_size,
-            model_config.num_classes)
+            dataset.num_classes)
+        optimizer = _create_optimizer(
+            model_config, dataset.examples_per_epoch(model_config.phase),
+            global_step)
 
         # Set up prefetch queue for examples to be accessible by all devices
         with tf.name_scope('data_input'):
-            images, labels = cnn.preprocessor.get_minibatch(model_config)
+            images, labels = cnn.input.get_minibatch(
+                dataset, model_config.phase, model_config.batch_size,
+                model_config.distort_images, model_config.min_example_fraction,
+                model_config.num_preprocessing_threads,
+                model_config.data_format)
             prefetch_queue = _create_queue([images, labels], 2 * num_devices,
                                            'prefetch_queue')
 
@@ -46,7 +55,7 @@ def train(model_config: cnn.config.ModelConfig):
             for device, device_name in zip(devices, device_names):
                 images, labels = prefetch_queue.dequeue()
                 cnn_builder = cnn.model.CNNBuilder(
-                    images, model_config.image_channels, True,
+                    images, dataset.image_shape[-1], True,
                     model_config.weight_decay_rate,
                     model_config.padding_mode, model_config.data_format,
                     model_config.data_type)
@@ -105,8 +114,8 @@ def _get_devices(num_gpus):
         return ['/gpu:{}'.format(i) for i in range(num_gpus)]
 
 
-def _create_optimizer(model_config, global_step):
-    steps_per_decay = int(model_config.examples_per_epoch *
+def _create_optimizer(model_config, examples_per_epoch, global_step):
+    steps_per_decay = int(examples_per_epoch *
                           model_config.epochs_per_decay /
                           model_config.batch_size)
     learning_rate = tf.train.exponential_decay(

@@ -23,17 +23,23 @@ def evaluate(model_config: cnn.config.ModelConfig):
     """
     with tf.Graph().as_default():
         global_step = cnn.compat_utils.get_or_create_global_step()
+        dataset = cnn.input.get_dataset(model_config.dataset_name,
+                                        model_config.data_dir,
+                                        model_config.overwrite)
+        model = cnn.model.get_model(model_config.model_type,
+                                    model_config.batch_size,
+                                    dataset.num_classes)
 
         # Preprocessing should occur on CPU for improved performance
         with tf.device('/cpu:0'):
-            images, labels = cnn.preprocessor.get_minibatch(model_config)
+            images, labels = cnn.input.get_minibatch(
+                dataset, model_config.phase, model_config.batch_size,
+                model_config.distort_images, model_config.min_example_fraction,
+                model_config.num_preprocessing_threads,
+                model_config.data_format)
 
-        # Run model
-        model = cnn.model.get_model(model_config.model_type,
-                                    model_config.batch_size,
-                                    model_config.num_classes)
         builder = cnn.model.CNNBuilder(
-            images, model_config.image_channels, False,
+            images, dataset.image_shape[-1], False,
             model_config.weight_decay_rate, model_config.padding_mode,
             model_config.data_format, model_config.data_type)
         logits = model.inference(builder)
@@ -51,7 +57,7 @@ def evaluate(model_config: cnn.config.ModelConfig):
         top_k_op_dict = {k: tf.nn.in_top_k(logits, labels, k) for k in
                          model_config.top_k_tests}
         num_correct_dict = {k: 0 for k in model_config.top_k_tests}
-        num_test_examples = (model_config.examples_per_epoch *
+        num_test_examples = (dataset.examples_per_epoch(model_config.phase) *
                              model_config.eval_set_fraction)
         num_steps = int(math.ceil(num_test_examples / model_config.batch_size))
         total_examples = num_steps * model_config.batch_size

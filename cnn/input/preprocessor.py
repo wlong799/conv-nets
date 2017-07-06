@@ -11,73 +11,72 @@ to the queue as they read it, while threads used by the model simultaneously
 dequeue the labeled examples one batch at a time.
 """
 import functools
-import os
 import random
-import glob
+
 import tensorflow as tf
 
-import cnn
+from .dataset import Dataset
 
 
-def get_minibatch(model_config: cnn.config.ModelConfig):
+def get_minibatch(dataset: Dataset, phase, batch_size, distort_images,
+                  min_example_fraction, num_preprocessing_threads,
+                  data_format):
     """Obtains batch of images to use for training or testing.
 
-    Parses the proper TFRecords file located in the data directory, applies
-    preprocessing steps to the images, and returns the labeled examples one
-    batch at a time.
-
-    Expects files in the format *phase*.tfrecords, where phase is the current
-    phase as specified by the configuration.
+    Parses the proper subset of TFRecords files from the supplied dataset,
+    applies preprocessing steps to the images, and returns the labeled
+    examples one batch at a time.
 
     Args:
-        model_config: Model configuration.
+        dataset: Dataset to return examples from.
+        phase: 'train', 'valid' or 'test'. Which subset of data to use.
+        batch_size: int. Number of examples per batch.
+        distort_images: bool. Whether to distort images during training phase.
+        min_example_fraction: float. Fraction of examples in buffer.
+        num_preprocessing_threads: int. Number threads to use for processing.
+        data_format: 'NCHW' or 'NHWC'
 
     Returns:
-        image_batch: 4D float32 Tensor [batch_size, image_height,
-                     image_width, 3] (if NHWC format). Batch of processed
+        image_batch: 4D float32 Tensor [batch_size, image_height, image_width,
+                     image_channels] (if NHWC format). Batch of processed
                      images to feed into the model.
-        label_batch: 1D int32 Tensor [batch_size]. Labels in the range
-                     0-9, corresponding to the class of the images in
-                     image_batch.
+
+        label_batch: 1D int32 Tensor [batch_size]. Labels corresponding to the
+                     class of the images in image_batch.
     """
-    with tf.name_scope('{}_batch_preprocessing'.format(model_config.phase)):
-        # Add proper TFRecord files to queue
-        pattern = '*{}*.tfrecords'.format(model_config.phase)
-        pattern = os.path.join(model_config.data_dir, pattern)
-        # tf.train.match_filenames_once() causes issues with variable restore
-        filename_queue = tf.train.string_input_producer(glob.glob(pattern))
+    with tf.name_scope('preprocess_{}_batch'.format(phase)):
+        # Get queue of TFRecord files from proper subset
+        filename_queue = dataset.get_filename_queue(phase)
 
         # Parse an image and apply preprocessing steps
-        image, label = _parse_cifar10_example(filename_queue)
-        use_distortions = (model_config.distort_images and
-                           model_config.phase == 'train')
-        processed_image = process_image(
-            image, model_config.image_height, model_config.image_width,
-            model_config.image_channels, use_distortions)
+        image, label, bbox = _parse_example(filename_queue)
+        use_distortions = distort_images and phase == 'train'
+        image_height, image_width, image_channels = dataset.image_shape
+        processed_image = process_image(image, image_height, image_width,
+                                        image_channels, use_distortions)
 
         # Add image summaries
         tf.summary.image('original', tf.expand_dims(image, 0), 1)
         tf.summary.image('processed', tf.expand_dims(processed_image, 0), 1)
 
         # Set up queue of example batches
-        capacity = (model_config.min_buffer_size +
-                    model_config.num_preprocessing_threads *
-                    model_config.batch_size)
-        if model_config.phase == 'train':
+        min_buffer_size = int(dataset.examples_per_epoch(phase) *
+                              min_example_fraction)
+        capacity = min_buffer_size + num_preprocessing_threads * batch_size
+        if phase == 'train':
             image_batch, label_batch = tf.train.shuffle_batch(
-                [processed_image, label], model_config.batch_size, capacity,
-                model_config.min_buffer_size,
-                model_config.num_preprocessing_threads)
+                [processed_image, label], batch_size, capacity,
+                min_buffer_size, num_preprocessing_threads)
         else:
             image_batch, label_batch = tf.train.batch(
-                [processed_image, label], model_config.batch_size,
-                model_config.num_preprocessing_threads, capacity)
-        if model_config.data_format == 'NCHW':
+                [processed_image, label], batch_size,
+                num_preprocessing_threads, capacity)
+        if data_format == 'NCHW':
             image_batch = tf.transpose(image_batch, [0, 3, 1, 2])
         return image_batch, label_batch
 
 
-def _parse_cifar10_example(filename_queue):
+def _parse_example(filename_queue):
     """Parses labeled example from filename queue of TFRecords files.
 
     Args:
@@ -85,21 +84,29 @@ def _parse_cifar10_example(filename_queue):
 
     Returns:
         image: 3D uint8 Tensor [height, width, channels]. Image in RGB.
-        label: int32 Tensor with value in range [0, 9]. The input class.
+        label: int32 Tensor. The input class.
     """
-    with tf.name_scope('example_parsing'):
+    # TODO: Do something with all the other features that are stored
+    with tf.name_scope('parse_example'):
         reader = tf.TFRecordReader()
         _, serialized_example = reader.read(filename_queue)
         features = tf.parse_single_example(serialized_example, features={
-            'height': tf.FixedLenFeature([], tf.int64),
-            'width': tf.FixedLenFeature([], tf.int64),
-            'channels': tf.FixedLenFeature([], tf.int64),
-            'label': tf.FixedLenFeature([], tf.int64),
-            'encoded_image': tf.FixedLenFeature([], tf.string)
+            'image/encoded': tf.FixedLenFeature([], tf.string),
+            'class/label': tf.FixedLenFeature([], tf.int64),
+            'bbox/xmin': tf.VarLenFeature(dtype=tf.float32),
+            'bbox/xmax': tf.VarLenFeature(dtype=tf.float32),
+            'bbox/ymin': tf.VarLenFeature(dtype=tf.float32),
+            'bbox/ymax': tf.VarLenFeature(dtype=tf.float32),
         })
-        label = tf.cast(features['label'], tf.int32)
-        image = tf.image.decode_png(features['encoded_image'], 3)
-        return image, label
+        image = tf.image.decode_jpeg(features['image/encoded'])
+        label = tf.cast(features['class/label'], tf.int32)
+
+        xmin = tf.expand_dims(features['bbox/xmin'].values, 0)
+        xmax = tf.expand_dims(features['bbox/xmax'].values, 0)
+        ymin = tf.expand_dims(features['bbox/ymin'].values, 0)
+        ymax = tf.expand_dims(features['bbox/ymax'].values, 0)
+        bbox = tf.concat([ymin, xmin, ymax, xmax], 0)
+        return image, label, bbox
 
 
 def process_image(image, image_height, image_width, image_channels,
@@ -116,10 +123,10 @@ def process_image(image, image_height, image_width, image_channels,
         processed_image: float32 image Tensor [image_height, image_width, 3].
     """
     # TODO: Consider making other resizing options available instead
-    with tf.name_scope('image_processing'):
+    with tf.name_scope('process_image'):
         processed_image = tf.image.convert_image_dtype(image, tf.float32)
         if use_distortions:
-            with tf.name_scope('image_distortion'):
+            with tf.name_scope('distort_image'):
                 processed_image = tf.random_crop(
                     processed_image,
                     [image_height, image_width, image_channels])
@@ -133,9 +140,13 @@ def process_image(image, image_height, image_width, image_channels,
 
 def _distort_color(image):
     """Performs random color distortions in a random order."""
-    distort_funcs = [lambda img: tf.image.random_brightness(img, 32.0 / 255),
-                     lambda img: tf.image.random_contrast(img, 0.5, 1.5),
-                     lambda img: tf.image.random_hue(img, 0.2),
-                     lambda img: tf.image.random_saturation(img, 0.5, 1.5)]
-    random.shuffle(distort_funcs)
-    return functools.reduce(lambda res, f: f(res), distort_funcs, image)
+    with tf.name_scope('distort_color'):
+        distort_funcs = \
+            [lambda img: tf.image.random_brightness(img, 32.0 / 255),
+             lambda img: tf.image.random_contrast(img, 0.5, 1.5),
+             lambda img: tf.image.random_hue(img, 0.2),
+             lambda img: tf.image.random_saturation(img, 0.5, 1.5)]
+        random.shuffle(distort_funcs)
+        distorted_image = \
+            functools.reduce(lambda res, f: f(res), distort_funcs, image)
+    return distorted_image

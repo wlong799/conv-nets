@@ -57,7 +57,8 @@ class ModelConfig(object):
 
         # Check parameter validity and convert to appropriate type
         self.dataset_name = self._get_string('dataset_name')
-        self.phase = self._get_string('phase', ['train', 'test', 'valid'])
+        self.overwrite = self._get_bool('overwrite')
+        self.phase = self._get_string('phase', ['train', 'valid', 'test'])
         self.model_type = self._get_string('model_type')
         self.padding_mode = self._get_string('padding_mode', ['SAME', 'VALID'])
 

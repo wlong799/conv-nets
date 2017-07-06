@@ -16,6 +16,7 @@ from .dataset import Dataset
 class CIFAR10Data(Dataset):
     def __init__(self, data_dir, overwrite):
         super(CIFAR10Data, self).__init__('CIFAR10', data_dir, overwrite)
+        self._count = 0
 
     @property
     def image_shape(self):
@@ -50,10 +51,10 @@ class CIFAR10Data(Dataset):
 
         # Remove current records if overwrite is on
         if overwrite:
-            [os.remove(record_name) for record_name in record_names]
-        # If all record files already exist, clean up binaries and exit
+            [os.remove(record_name) for record_name in record_names if
+             os.path.exists(record_name)]
+        # If all record files already exist, exit
         if all([os.path.exists(record_name) for record_name in record_names]):
-            shutil.rmtree(os.path.join(self.data_dir, cifar_data_dir))
             return
 
         # Download and extract binaries
@@ -96,6 +97,8 @@ def _create_cifar10_record_from_binaries(record_filename, data_filenames,
         data_filenames: List of CIFAR-10 binaries to read from.
         metadata: List such that metadata[i] = 'name of class with label i'
     """
+    count = 0
+    total_examples = 10000 * len(data_filenames)
     label_bytes = 1
     image_width, image_height, image_channels = 32, 32, 3
     image_bytes = image_width * image_height * image_channels
@@ -124,10 +127,18 @@ def _create_cifar10_record_from_binaries(record_filename, data_filenames,
                 'image/encoded': utils.bytes_feature(encoded_image),
                 'class/label': utils.int64_feature(label),
                 'class/text': utils.bytes_feature(metadata[label]),
-                'bbox/xmin': utils.int64_feature([]),
-                'bbox/xmax': utils.int64_feature([]),
-                'bbox/ymin': utils.int64_feature([]),
-                'bbox/ymax': utils.int64_feature([])
+                'bbox/xmin': utils.float_feature(0.0),
+                'bbox/xmax': utils.float_feature(1.0),
+                'bbox/ymin': utils.float_feature(0.0),
+                'bbox/ymax': utils.float_feature(1.0)
             }))
             record_writer.write(example.SerializeToString())
+            count += 1
+            if count % 100 == 0:
+                percent_done = count / total_examples * 100
+                print('\r>> Creating dataset {} ({} examples): '
+                      '{:>4.1f}% complete'.format(
+                    os.path.basename(record_filename), total_examples,
+                    percent_done), end='')
+    print()
     record_writer.close()
