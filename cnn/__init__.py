@@ -3,8 +3,8 @@
 import cnn.cnn_app
 import cnn.compat_utils
 import cnn.config
-import cnn.eval
+import cnn.testing
 import cnn.input
 import cnn.model
 import cnn.monitor
-import cnn.train
+import cnn.training

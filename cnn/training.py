@@ -62,7 +62,7 @@ def train(model_config: cnn.config.ModelConfig):
                 # Place only computationally expensive inference step on device
                 with tf.device(device), tf.name_scope(device_name) as scope:
                     logits = model.inference(cnn_builder)
-                    total_loss = _calc_total_loss(logits, labels, scope)
+                    total_loss = calc_total_loss(logits, labels, scope)
                     gradients = optimizer.compute_gradients(total_loss)
                     tf.get_variable_scope().reuse_variables()
                     device_gradients.append(gradients)
@@ -86,8 +86,8 @@ def train(model_config: cnn.config.ModelConfig):
 
         total_loss = tf.reduce_mean(total_losses)
         train_op = tf.group(apply_grad_op, variable_averages_op)
-        with cnn.monitor.get_monitored_cnn_session(model_config, total_loss,
-                                                   global_step) as mon_sess:
+        with cnn.monitor.create_training_session(model_config, total_loss,
+                                                 global_step) as mon_sess:
             while not mon_sess.should_stop():
                 mon_sess.run(train_op)
 
@@ -138,8 +138,8 @@ def _create_queue(tensors, capacity, name):
     return queue
 
 
-def _calc_total_loss(logits, labels, scope=None):
-    # Calculate cross entropy loss
+def calc_total_loss(logits, labels, scope=None):
+    """Calculate cross entropy + weight decay loss"""
     cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
         labels=labels, logits=logits, name='cross_entropy_per_example')
     cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
