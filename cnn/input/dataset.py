@@ -8,13 +8,16 @@ import tensorflow as tf
 
 
 class Dataset(metaclass=abc.ABCMeta):
-    """Abstract superclass for all datasets."""
+    """Abstract superclass for all datasets. Implementations must be able to
+    build the initial dataset into TFRecords files, and provide basic
+    information about the dataset. """
 
     def __init__(self, name, data_dir, overwrite):
-        """Sets name and data directory, and creates the dataset."""
+        """Sets name and data directory, as well as whether to force
+        creation of a new dataset, even if dataset currently exists. """
         self.name = name
         self.data_dir = data_dir
-        self._create_dataset(overwrite)
+        self.overwrite = overwrite
 
     @staticmethod
     def _assert_phase(phase):
@@ -30,14 +33,36 @@ class Dataset(metaclass=abc.ABCMeta):
         pattern = os.path.join(self.data_dir, pattern)
         return tf.train.string_input_producer(glob.glob(pattern))
 
+    @property
     @abc.abstractmethod
-    def _create_dataset(self, overwrite):
+    def image_shape(self):
+        """Get the shape that image should be post-processing (H, W, C)."""
+        pass
+
+    @property
+    @abc.abstractmethod
+    def num_classes(self):
+        """Get tbe number of unique classes/labels contained in dataset."""
+        pass
+
+    def examples_per_epoch(self, phase):
+        """Get number of examples in the subset of data for the given phase."""
+        self._assert_phase(phase)
+        return self._examples_per_epoch(phase)
+
+    @abc.abstractmethod
+    def _examples_per_epoch(self, phase):
+        """Helper for examples_per_epoch() to be overwritten. Phase
+        guaranteed to be one of 'train', 'valid', or 'test'. """
+        pass
+
+    def create_dataset(self):
         """Creates TFRecords files for the dataset in the data directory.
 
         Each file must represent a different phase, and have a name matching
         the pattern *{phase}*.tfrecords. See the get_filename_queue() method
-        for how the dataset determines the proper data subsets for the
-        current phase.
+        for how the dataset determines the proper data files for the current
+        phase.
 
         Only creates the new TFRecords files if they don't already exist.
         However, if self.overwrite is True, any current TFRecords already
@@ -45,35 +70,33 @@ class Dataset(metaclass=abc.ABCMeta):
 
         Each Example in the dataset should contain the following fields:
 
-        image/height: int64 Image height.
-        image/width: int64. Image width.
-        image/channels: int64. Image channels.
-        image/colorspace: bytes. 'RGB' or 'grayscale'
-        image/format: bytes. 'JPEG'
-        image/filename: bytes. Filename example was created from.
-        image/encoded: bytes. <JPEG encoded string>
+        image/encoded: bytes. <JPEG encoded string>.
         class/label: int64. Label for class of example.
-        class/text: bytes. Text name for class of example.
-        bbox/xmin: int64. List of xmin values for bounding boxes in image.
-        bbox/xmax: int64. List of xmax values for bounding boxes in image.
-        bbox/ymin: int64. List of ymin values for bounding boxes in image.
-        bbox/ymax: int64. List of ymax values for bounding boxes in image.
+        class/text: bytes. Text label for class of example.
         """
-        pass
+        if self.overwrite:
+            patterns = [os.path.join(
+                self.data_dir, '*{}*.tfrecords'.format(phase)) for phase in
+                ['train', 'valid', 'test']]
+            for pattern in patterns:
+                filenames = glob.glob(pattern)
+                [os.remove(filename) for filename in filenames]
+        if not self._all_records_files_created:
+            self._create_dataset()
+        if not self._all_records_files_created:
+            raise RuntimeError(
+                "Not all files were initialized for dataset '{}'.".format(
+                    self.name))
 
     @property
     @abc.abstractmethod
-    def image_shape(self):
-        """Get shape image should be post-processing (H, W, C)."""
-        pass
-
-    @property
-    @abc.abstractmethod
-    def num_classes(self):
-        """Get number of unique classes/labels contained in dataset."""
+    def _all_records_files_created(self):
+        """Should return True only if all expected TFRecords files have been
+        created. """
         pass
 
     @abc.abstractmethod
-    def examples_per_epoch(self, phase):
-        """Number of examples in subset of dataset for the given phase."""
+    def _create_dataset(self):
+        """Only runs if at least some expected TFRecords files are not
+        present, and at end, all expected files must have been created. """
         pass

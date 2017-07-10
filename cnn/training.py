@@ -31,6 +31,7 @@ def train(model_config: cnn.config.ModelConfig):
         dataset = cnn.input.get_dataset(
             model_config.dataset_name, model_config.data_dir,
             model_config.overwrite)
+        dataset.create_dataset()
         model = cnn.model.get_model(
             model_config.model_type, model_config.batch_size,
             dataset.num_classes)
