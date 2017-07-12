@@ -1,7 +1,6 @@
 # coding=utf-8
 """Various utility functions for downloading and creating datasets."""
 import os
-import sys
 import urllib.request
 
 import tensorflow as tf
@@ -76,7 +75,7 @@ def download_dataset(download_urls, dest_dir, verbose=True):
                     '\r>> Downloading file {} ({} of {})... {:>4.1f}% ' \
                     'complete'.format(filename, i + 1, len(download_urls),
                                       percent_complete)
-                sys.stderr.write(progress)
+                print(progress, end='', flush=True)
 
             if not verbose:
                 _download_progress = None

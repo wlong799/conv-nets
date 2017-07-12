@@ -5,7 +5,6 @@ import re
 import tensorflow as tf
 
 import cnn
-import cnn.model.model_selection
 
 
 def train(model_config: cnn.config.ModelConfig):
@@ -41,7 +40,7 @@ def train(model_config: cnn.config.ModelConfig):
 
         # Set up prefetch queue for examples to be accessible by all devices
         with tf.name_scope('data_input'):
-            images, labels = cnn.input.get_minibatch(
+            images, labels, _ = cnn.input.get_minibatch(
                 dataset, model_config.phase, model_config.batch_size,
                 model_config.distort_images, model_config.min_example_fraction,
                 model_config.num_preprocessing_threads,
@@ -53,10 +52,12 @@ def train(model_config: cnn.config.ModelConfig):
         device_gradients = []
         total_losses = []
         with tf.variable_scope(tf.get_variable_scope()):
+            image_channels = dataset.image_shape[-1]
+            is_train_phase = True
             for device, device_name in zip(devices, device_names):
                 images, labels = prefetch_queue.dequeue()
                 cnn_builder = cnn.model.CNNBuilder(
-                    images, dataset.image_shape[-1], True,
+                    images, image_channels, is_train_phase,
                     model_config.weight_decay_rate,
                     model_config.padding_mode, model_config.data_format,
                     model_config.data_type)
@@ -69,23 +70,27 @@ def train(model_config: cnn.config.ModelConfig):
                     device_gradients.append(gradients)
                     total_losses.append(total_loss)
 
-        _add_loss_summaries(device_names)
-        _add_activation_summaries(device_names)
         # Average gradients across all devices and apply to variables
         gradients = _calc_average_gradients(device_gradients)
         apply_grad_op = optimizer.apply_gradients(gradients, global_step)
+
+        # Add summaries
+        _add_loss_summaries(device_names)
+        _add_activation_summaries(device_names)
+        total_loss = tf.reduce_mean(total_losses, name='total_loss')
         for grad, var in gradients:
             if grad is not None:
                 tf.summary.histogram('{}/values'.format(var.op.name), var)
                 tf.summary.histogram('{}/gradients'.format(var.op.name), grad)
 
         # Track variable moving averages for better predictions
-        variable_averages = tf.train.ExponentialMovingAverage(
-            model_config.moving_avg_decay_rate, global_step, name='var_avg')
-        variable_averages_op = variable_averages.apply(
-            tf.trainable_variables())
+        with tf.name_scope('moving_avg'):
+            variable_averages = tf.train.ExponentialMovingAverage(
+                model_config.moving_avg_decay_rate, global_step,
+                name='moving_avg')
+            variable_averages_op = variable_averages.apply(
+                tf.trainable_variables())
 
-        total_loss = tf.reduce_mean(total_losses)
         train_op = tf.group(apply_grad_op, variable_averages_op)
         with cnn.monitor.create_training_session(model_config, total_loss,
                                                  global_step) as mon_sess:
@@ -93,22 +98,18 @@ def train(model_config: cnn.config.ModelConfig):
                 mon_sess.run(train_op)
 
 
-def _calc_average_gradients(device_grads):
-    average_grads = []
-    for grad_and_vars in zip(*device_grads):
-        grads = []
-        for g, _ in grad_and_vars:
-            expanded_g = tf.expand_dims(g, 0)
-            grads.append(expanded_g)
-        grad = tf.concat(axis=0, values=grads)
-        grad = tf.reduce_mean(grad, 0)
-        v = grad_and_vars[0][1]
-        grad_and_var = (grad, v)
-        average_grads.append(grad_and_var)
-    return average_grads
+def calc_total_loss(logits, labels, scope=None):
+    """Calculate cross entropy + weight decay loss"""
+    cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
+        labels=labels, logits=logits, name='cross_entropy_per_example')
+    cross_entropy_mean = tf.reduce_mean(cross_entropy,
+                                        name='cross_entropy')
+    tf.add_to_collection('losses', cross_entropy_mean)
+    return tf.add_n(tf.get_collection('losses', scope), 'total_loss')
 
 
 def _get_devices(num_gpus):
+    """Determine devices that will be used for inference."""
     if num_gpus == 0:
         return ['/cpu:0']
     else:
@@ -116,6 +117,7 @@ def _get_devices(num_gpus):
 
 
 def _create_optimizer(model_config, examples_per_epoch, global_step):
+    """Creates exponentially decaying optimizer for training model."""
     steps_per_decay = int(examples_per_epoch *
                           model_config.epochs_per_decay /
                           model_config.batch_size)
@@ -129,6 +131,7 @@ def _create_optimizer(model_config, examples_per_epoch, global_step):
 
 
 def _create_queue(tensors, capacity, name):
+    """Creates a FIFO queue for holding processed batches for inference."""
     queue = tf.FIFOQueue(capacity, [tensor.dtype for tensor in tensors],
                          [tensor.get_shape() for tensor in tensors], name=name)
     enqueue_op = queue.enqueue(tensors)
@@ -139,31 +142,48 @@ def _create_queue(tensors, capacity, name):
     return queue
 
 
-def calc_total_loss(logits, labels, scope=None):
-    """Calculate cross entropy + weight decay loss"""
-    cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
-        labels=labels, logits=logits, name='cross_entropy_per_example')
-    cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
-    tf.add_to_collection('losses', cross_entropy_mean)
-    return tf.add_n(tf.get_collection('losses', scope), 'total_loss')
+def _calc_average_gradients(device_grads):
+    with tf.name_scope('average_gradients'):
+        average_grads = []
+        for grad_and_vars in zip(*device_grads):
+            grads = []
+            for g, _ in grad_and_vars:
+                expanded_g = tf.expand_dims(g, 0)
+                grads.append(expanded_g)
+            grad = tf.concat(axis=0, values=grads)
+            grad = tf.reduce_mean(grad, 0)
+            v = grad_and_vars[0][1]
+            grad_and_var = (grad, v)
+            average_grads.append(grad_and_var)
+        return average_grads
 
 
 def _add_loss_summaries(device_names):
-    average_losses = _average_values_across_devices('losses', device_names)
-    average_total_loss = tf.reduce_sum(average_losses,
-                                       name='losses/total_loss')
+    """Averages losses across all devices and adds summary for each."""
+    with tf.name_scope('loss_summary'):
+        average_losses = _average_values_across_devices('losses', device_names)
+        average_total_loss = tf.reduce_sum(average_losses,
+                                           name='losses/total_loss')
     for loss in average_losses + [average_total_loss]:
-        tf.summary.scalar(loss.op.name, loss)
+        stripped_name = '/'.join(loss.op.name.split('/')[1:])
+        tf.summary.scalar(stripped_name, loss)
 
 
 def _add_activation_summaries(device_names):
-    average_activations = _average_values_across_devices('activations',
-                                                         device_names)
-    for activation in average_activations:
-        tf.summary.histogram('{}/values'.format(activation.op.name),
-                             activation)
-        tf.summary.scalar('{}/sparsity'.format(activation.op.name),
-                          tf.nn.zero_fraction(activation))
+    """For each layer, averages its activation across all devices, and adds
+    both a scalar summary of its sparsity, and an overall histogram summary."""
+    # Use name scope for calculation ops for cleaner graph view
+    with tf.name_scope('activation_summary'):
+        average_activations = _average_values_across_devices('activations',
+                                                             device_names)
+        sparsities = [tf.nn.zero_fraction(activation) for
+                      activation in average_activations]
+    # Add summaries, with names stripped of prefix for cleaner summary view
+    for activation, sparsity in zip(average_activations, sparsities):
+        stripped_name = '/'.join(activation.op.name.split('/')[1:])
+        tf.summary.scalar('{}/sparsity'.format(stripped_name), sparsity)
+        stripped_name = '/'.join(stripped_name.split('/')[1:])
+        tf.summary.histogram('{}/values'.format(stripped_name), activation)
 
 
 def _average_values_across_devices(collection_name, device_names):

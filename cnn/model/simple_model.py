@@ -23,5 +23,6 @@ class SimpleModel(Model):
         cnn_builder.reshape([self.batch_size, -1])
         cnn_builder.affine(512)
         cnn_builder.affine(256)
-        logits, _ = cnn_builder.affine(self.num_classes)
+        logits, _ = cnn_builder.affine(self.num_classes,
+                                       activation_method=None)
         return logits

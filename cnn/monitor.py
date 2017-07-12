@@ -30,7 +30,7 @@ def create_training_session(model_config: cnn.config.ModelConfig,
         raise ValueError(
             "Only use create_training_session for training phase.")
     # Allow soft placement for operations to be placed on proper device
-    # Turn log device placement on to debug device use
+    # Log device placement allows for debugging of device use if desired
     config = tf.ConfigProto(
         allow_soft_placement=True,
         log_device_placement=model_config.log_device_placement)
@@ -57,26 +57,27 @@ def create_training_session(model_config: cnn.config.ModelConfig,
     # Logs loss and step information to terminal
     hooks.append(tf.train.NanTensorHook(loss))
     if model_config.print_log_steps > 0:
+        examples_per_step = (model_config.batch_size *
+                             (model_config.num_gpus or 1))
         hooks.append(
-            _LoggerHook(loss, global_step,
-                        model_config.batch_size * (model_config.num_gpus or 1),
+            _LoggerHook(loss, global_step, examples_per_step,
                         model_config.print_log_steps))
 
     return tf.train.MonitoredSession(session_creator, hooks)
 
 
-def create_testing_session(model_config: cnn.config.ModelConfig,
-                           variables_to_restore):
-    """Creates a MonitoredSession for training the model.
+def create_testing_session(model_config: cnn.config.ModelConfig, saver):
+    """Creates a MonitoredSession for testing the model.
 
-    This monitored session provides custom restores (e.g. from moving
-    variable averages), but contains no hooks for saving
-    summaries/checkpoints to avoid conflicts with training. Should be used
-    for validation and testing phases.
+    This monitored session allows a Saver argument for custom restores (e.g.
+    from moving variable averages), but contains no hooks for saving
+    summaries/checkpoints to avoid conflicts with training summaries and
+    prevent training on the testing/validation sets. Should be used for
+    validation and testing phases.
 
     Args:
         model_config: Model configuration.
-        variables_to_restore: Variables to restore, or None for default.
+        saver: Saver to use for restoring variables.
 
     Returns:
         MonitoredSession for testing the model.
@@ -85,7 +86,6 @@ def create_testing_session(model_config: cnn.config.ModelConfig,
         raise ValueError(
             "Only use create_testing_session for validation or testing phase.")
 
-    saver = tf.train.Saver(variables_to_restore)
     scaffold = tf.train.Scaffold(saver=saver)
     session_creator = tf.train.ChiefSessionCreator(
         scaffold, checkpoint_dir=model_config.checkpoints_dir)
@@ -117,9 +117,8 @@ class _LoggerHook(tf.train.SessionRunHook):
             duration = current_time - self.start_time
             self.start_time = current_time
 
-            examples_per_sec = (self.log_frequency *
-                                self.examples_per_step / duration)
             secs_per_step = float(duration / self.log_frequency)
+            examples_per_sec = self.examples_per_step / secs_per_step
             format_str = '{}: step {} | Loss = {:.2f} | ' \
                          '{:.1f} examples/second | {:.3f} seconds/step'
             print(format_str.format(datetime.datetime.now(), global_step_value,

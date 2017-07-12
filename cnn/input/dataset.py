@@ -59,21 +59,23 @@ class Dataset(metaclass=abc.ABCMeta):
     def create_dataset(self):
         """Creates TFRecords files for the dataset in the data directory.
 
-        Each file must represent a different phase, and have a name matching
-        the pattern *{phase}*.tfrecords. See the get_filename_queue() method
-        for how the dataset determines the proper data files for the current
-        phase.
+        Data for different phases must be located in different files,
+        and have a name matching the pattern *{phase}*.tfrecords. See the
+        get_filename_queue() method for how the dataset determines the
+        proper data files for the current phase.
 
         Only creates the new TFRecords files if they don't already exist.
         However, if self.overwrite is True, any current TFRecords already
         created will be deleted, and new ones must be created.
 
-        Each Example in the dataset should contain the following fields:
+        Each serialized example in the records files should contain the
+        following fields:
 
         image/encoded: bytes. <JPEG encoded string>.
         class/label: int64. Label for class of example.
         class/text: bytes. Text label for class of example.
         """
+        # Remove files if overwrite is on
         if self.overwrite:
             patterns = [os.path.join(
                 self.data_dir, '*{}*.tfrecords'.format(phase)) for phase in
@@ -81,6 +83,7 @@ class Dataset(metaclass=abc.ABCMeta):
             for pattern in patterns:
                 filenames = glob.glob(pattern)
                 [os.remove(filename) for filename in filenames]
+        # Create necessary datasets and check everything has been initialized
         if not self._all_records_files_created:
             self._create_dataset()
         if not self._all_records_files_created:
@@ -92,7 +95,7 @@ class Dataset(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def _all_records_files_created(self):
         """Should return True only if all expected TFRecords files have been
-        created. """
+        created."""
         pass
 
     @abc.abstractmethod

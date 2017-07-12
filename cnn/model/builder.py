@@ -91,7 +91,7 @@ class CNNBuilder(object):
     def convolution(self, num_out_channels, kernel_height, kernel_width,
                     vertical_stride=1, horizontal_stride=1,
                     activation_method='relu', decay_kernel=True,
-                    decay_bias=True):
+                    decay_bias=True, padding_mode=None):
         """Adds a convolutional layer to network.
 
         Args:
@@ -106,6 +106,8 @@ class CNNBuilder(object):
                           applied to filter variable.
             decay_bias: bool. Whether weight decay regularization should be
                         applied to bias variable.
+            padding_mode: 'SAME' or 'VALID'. Padding mode to use, or None for
+                          CNNBuilder default
 
 
         Returns:
@@ -126,8 +128,8 @@ class CNNBuilder(object):
                 strides = [1, vertical_stride, horizontal_stride, 1]
             else:
                 strides = [1, 1, vertical_stride, horizontal_stride]
-            conv = tf.nn.conv2d(self.top_layer, kernel, strides,
-                                self.padding_mode,
+            padding_mode = padding_mode or self.padding_mode
+            conv = tf.nn.conv2d(self.top_layer, kernel, strides, padding_mode,
                                 data_format=self.data_format)
             # Add bias and apply activation
             bias_decay_rate = self.weight_decay_rate if decay_bias else 0.0
@@ -164,7 +166,7 @@ class CNNBuilder(object):
         return self.top_layer, self.num_top_channels
 
     def max_pooling(self, kernel_height, kernel_width, vertical_stride=2,
-                    horizontal_stride=2):
+                    horizontal_stride=2, padding_mode=None):
         """Adds maximum pooling layer to network.
 
         Args:
@@ -172,6 +174,8 @@ class CNNBuilder(object):
             kernel_width: int. Width of window used for pooling.
             vertical_stride: int. Vertical stride.
             horizontal_stride: int. Horizontal stride.
+            padding_mode: 'SAME' or 'VALID'. Padding mode to use, or None for
+                          CNNBuilder default
 
         Returns:
             new_top_layer: Tensor. New top layer of model.
@@ -185,9 +189,9 @@ class CNNBuilder(object):
         else:
             kernel_shape = [1, 1, kernel_height, kernel_width]
             strides = [1, 1, vertical_stride, horizontal_stride]
+        padding_mode = padding_mode or self.padding_mode
         pool = tf.nn.max_pool(self.top_layer, kernel_shape, strides,
-                              self.padding_mode,
-                              self.data_format, name)
+                              padding_mode, self.data_format, name)
 
         self.top_layer = pool
         return self.top_layer, self.num_top_channels
@@ -270,14 +274,14 @@ def cnn_variable(name, shape, init_method='glorot_uniform',
     return variable
 
 
-def _get_activation(input_tensor, method, name=None):
+def _get_activation(input_tensor, method):
     method = method or 'linear'
     return {
-        'linear': input_tensor,
-        'relu': tf.nn.relu(input_tensor, name),
-        'sigmoid': tf.nn.sigmoid(input_tensor, name),
-        'softmax': tf.nn.softmax(input_tensor, name=name),
-        'tanh': tf.nn.tanh(input_tensor, name)
+        'linear': tf.multiply(input_tensor, 1, 'linear'),
+        'relu': tf.nn.relu(input_tensor),
+        'sigmoid': tf.nn.sigmoid(input_tensor),
+        'softmax': tf.nn.softmax(input_tensor),
+        'tanh': tf.nn.tanh(input_tensor)
     }[method]
 
 

@@ -15,7 +15,7 @@ class ModelConfig(object):
 
     Parameters can be loaded from configuration files, or from passed
     keyword arguments. Automatically checks that specified parameters have
-    appropriate values. """
+    appropriate values."""
 
     def __init__(self, custom_config_file=None,
                  custom_config_section=None, **kwargs):
@@ -24,13 +24,8 @@ class ModelConfig(object):
         Configuration parameters are loaded first from the default file,
         then from user specified file (if available), and then from any
         passed keyword arguments. Look at defaults.ini for an example
-        configuration file setup, and to see documentation on the
-        configuration parameters available.
-
-        Most variables have reasonable default fallback values provided by
-        the defaults.ini configuration file. However, certain variables,
-        specific to the dataset the model is training on, do not, and thus
-        must be specified by the user. See defaults.ini for details.
+        configuration file setup,to see documentation on the configuration
+        parameters available, and to see the default values for each parameter.
 
         Args:
             custom_config_file: Filename of custom configuration file,
@@ -90,14 +85,15 @@ class ModelConfig(object):
         self.moving_avg_decay_rate = self._get_num('moving_avg_decay_rate',
                                                    float, 0, 1)
 
-        # TODO: Fix following line to provide better error checking
+        # Following line has poor error checking
         self.top_k_tests = [int(num) for num in
                             self._get_string('top_k_tests').split(',')]
         self.restore_moving_averages = self._get_bool(
             'restore_moving_averages')
-        self.valid_set_fraction = self._get_num(
-            'valid_set_fraction', float, 0, 1)
-        self.valid_repeat_secs = self._get_num('valid_repeat_secs', int, 0)
+        self.bg_valid_set_fraction = self._get_num(
+            'bg_valid_set_fraction', float, 0, 1)
+        self.bg_valid_repeat_secs = self._get_num(
+            'bg_valid_repeat_secs', int, 0)
 
         self.log_device_placement = self._get_bool('log_device_placement')
         self.print_log_steps = self._get_num('print_log_steps', int, 0)
