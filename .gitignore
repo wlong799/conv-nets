@@ -1,7 +1,6 @@
 .idea/
 
 __pycache__
+data/
+logs/
 
-/cifar10
-!/cifar10/cifar10.ini
-!/cifar10/cifar10.py

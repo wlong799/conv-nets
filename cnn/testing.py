@@ -9,7 +9,7 @@ import tensorflow as tf
 import cnn
 
 
-def evaluate(model_config: cnn.config.ModelConfig):
+def evaluate(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
     """Evaluates accuracy of model.
 
     Restores variables from the most recent checkpoint file available,
@@ -19,17 +19,10 @@ def evaluate(model_config: cnn.config.ModelConfig):
     the model, for various values of k specified in the configuration file.
     Validation phase can run repeatedly in background if specified, to aid
     monitoring of training sessions.
-
-    Args:
-        model_config: Model configuration.
     """
     with tf.Graph().as_default():
         # Set up model
         global_step = cnn.compat_utils.get_or_create_global_step()
-        dataset = cnn.input.get_dataset(model_config.dataset_name,
-                                        model_config.data_dir,
-                                        model_config.overwrite)
-        dataset.create_dataset()
         model = cnn.model.get_model(model_config.model_type,
                                     model_config.batch_size,
                                     dataset.num_classes)

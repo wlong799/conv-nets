@@ -7,17 +7,14 @@ import tensorflow as tf
 import cnn
 
 
-def train(model_config: cnn.config.ModelConfig):
+def train(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
     """Trains a neural network with the specified configuration.
 
     Model trains a neural network. Preprocessing and all variable storage
     occurs on the CPU. If GPUs are available, then inference will run in
     parallel across all GPUs, and average gradients will be computed for each
     step. Logging, checkpoint saving, and TensorBoard visualizations are
-    created as well using a monitored session.
-
-    Args:
-        model_config: Model configuration.
+    created using a monitored session.
     """
     # Determine devices to use for inference.
     devices = _get_devices(model_config.num_gpus)
@@ -27,10 +24,6 @@ def train(model_config: cnn.config.ModelConfig):
     with tf.Graph().as_default(), tf.device('/cpu:0'):
         # Initialize model-wide variables
         global_step = cnn.compat_utils.get_or_create_global_step()
-        dataset = cnn.input.get_dataset(
-            model_config.dataset_name, model_config.data_dir,
-            model_config.overwrite)
-        dataset.create_dataset()
         model = cnn.model.get_model(
             model_config.model_type, model_config.batch_size,
             dataset.num_classes)

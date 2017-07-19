@@ -39,8 +39,9 @@ class ModelConfig(object):
         # Load all available parameters to an initial dictionary
         self._config_dict = {}
         self._load_config(DEFAULT_CONFIG_FILE, DEFAULT_CONFIG_SECTION)
-        custom_config_section = custom_config_section or DEFAULT_CONFIG_SECTION
         if custom_config_file:
+            custom_config_section = custom_config_section or \
+                                    DEFAULT_CONFIG_SECTION
             self._load_config(custom_config_file, custom_config_section)
         # Initial dictionary expects key and value pairs both to be strings
         for key in kwargs:
@@ -52,9 +53,15 @@ class ModelConfig(object):
 
         # Check parameter validity and convert to appropriate type
         self.dataset_name = self._get_string('dataset_name')
+        use_dataset_config = self._get_bool('use_dataset_config')
+        if use_dataset_config:
+            self.dataset_config = self._get_string('dataset_config')
+        else:
+            self.dataset_config = None
         self.overwrite = self._get_bool('overwrite')
-        self.phase = self._get_string('phase', ['train', 'valid', 'test'])
+
         self.model_type = self._get_string('model_type')
+        self.phase = self._get_string('phase', ['train', 'valid', 'test'])
         self.padding_mode = self._get_string('padding_mode', ['SAME', 'VALID'])
 
         self.data_dir = self._get_string('data_dir')
@@ -85,9 +92,13 @@ class ModelConfig(object):
         self.moving_avg_decay_rate = self._get_num('moving_avg_decay_rate',
                                                    float, 0, 1)
 
-        # Following line has poor error checking
-        self.top_k_tests = [int(num) for num in
-                            self._get_string('top_k_tests').split(',')]
+        # Loading of top_k_tests is a bit hacky to ensure error checking
+        top_k_tests_str = self._get_string('top_k_tests').split(',')
+        top_k_tests = []
+        for str_val in top_k_tests_str:
+            self._config_dict['top_k_tests_split'] = str_val
+            top_k_tests.append(self._get_num('top_k_tests_split', int, 1))
+        self.top_k_tests = top_k_tests
         self.restore_moving_averages = self._get_bool(
             'restore_moving_averages')
         self.bg_valid_set_fraction = self._get_num(
@@ -112,12 +123,16 @@ class ModelConfig(object):
                              .format(config_section, config_file))
         self._config_dict.update(config[config_section])
 
+    def _assert_key(self, key):
+        """Quick check that key and associated value actually exist."""
+        if key not in self._config_dict or self._config_dict[key] is None:
+            raise ValueError("Setting '{}' was not specified".format(key))
+
     def _get_bool(self, key):
         """Converts configuration setting to a boolean value. Expects one of
         'true', '1', 'yes' or 'on' for True; Expects 'false', '0', 'no' or
         'off' for False (capitalization does not matter)."""
-        if key not in self._config_dict or self._config_dict[key] is None:
-            raise ValueError("Setting '{}' was not specified".format(key))
+        self._assert_key(key)
         true_vals = ['true', '1', 'yes', 'on']
         false_vals = ['false', '0', 'no', 'off']
         if self._config_dict[key].lower() in true_vals:
@@ -131,8 +146,7 @@ class ModelConfig(object):
         """Converts configuration setting to numeric value of specified
         type, and ensures that it falls within appropriate bounds,
         if provided."""
-        if key not in self._config_dict or self._config_dict[key] is None:
-            raise ValueError("Setting '{}' was not specified".format(key))
+        self._assert_key(key)
         try:
             val = num_type(self._config_dict[key])
         except ValueError as e:
@@ -153,8 +167,7 @@ class ModelConfig(object):
     def _get_string(self, key, choices=None):
         """Returns configuration setting as string, and checks that it is
         one of the allowed choices, if provided. """
-        if key not in self._config_dict or self._config_dict[key] is None:
-            raise ValueError("Setting '{}' was not specified".format(key))
+        self._assert_key(key)
         if choices and self._config_dict[key] not in choices:
             raise ValueError("Setting '{}' must be one of following: '{}'".
                              format(key, ', '.join(choices)))
