@@ -87,8 +87,9 @@ class ModelConfig(object):
         self.learning_decay_rate = self._get_num('learning_decay_rate',
                                                  float, 0, 1)
         self.epochs_per_decay = self._get_num('epochs_per_decay', int, 1)
-        self.weight_decay_rate = self._get_num('weight_decay_rate',
-                                               float, 0)
+        use_weight_decay = self._get_bool('use_weight_decay')
+        weight_decay_rate = self._get_num('weight_decay_rate', float, 0)
+        self.weight_decay_rate = use_weight_decay and weight_decay_rate or 0.0
         self.moving_avg_decay_rate = self._get_num('moving_avg_decay_rate',
                                                    float, 0, 1)
 

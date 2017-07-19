@@ -57,7 +57,8 @@ def train(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
                 # Place only computationally expensive inference step on device
                 with tf.device(device), tf.name_scope(device_name) as scope:
                     logits = model.inference(cnn_builder)
-                    total_loss = calc_total_loss(logits, labels, scope)
+                    total_loss = cnn.losses.calc_total_loss(
+                        logits, labels, dataset.class_weights, scope)
                     gradients = optimizer.compute_gradients(total_loss)
                     tf.get_variable_scope().reuse_variables()
                     device_gradients.append(gradients)
@@ -89,16 +90,6 @@ def train(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
                                                  global_step) as mon_sess:
             while not mon_sess.should_stop():
                 mon_sess.run(train_op)
-
-
-def calc_total_loss(logits, labels, scope=None):
-    """Calculate cross entropy + weight decay loss"""
-    cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
-        labels=labels, logits=logits, name='cross_entropy_per_example')
-    cross_entropy_mean = tf.reduce_mean(cross_entropy,
-                                        name='cross_entropy')
-    tf.add_to_collection('losses', cross_entropy_mean)
-    return tf.add_n(tf.get_collection('losses', scope), 'total_loss')
 
 
 def _get_devices(num_gpus):

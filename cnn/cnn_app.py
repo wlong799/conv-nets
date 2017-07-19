@@ -24,7 +24,7 @@ def run(config_file=None, config_section=None, **kwargs):
         cnn.testing.evaluate(model_config, dataset)
     # Run an evaluation on validation dataset
     # Since not running in background, only run once, on entire dataset
-    if model_config.phase == 'valid':
+    elif model_config.phase == 'valid':
         model_config.bg_valid_set_fraction = 1.0
         model_config.bg_valid_repeat_secs = 0
         cnn.testing.evaluate(model_config, dataset)

@@ -43,7 +43,8 @@ def evaluate(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
             model_config.weight_decay_rate, model_config.padding_mode,
             model_config.data_format, model_config.data_type)
         logits = model.inference(builder)
-        loss = cnn.training.calc_total_loss(logits, labels)
+        loss = cnn.losses.calc_total_loss(logits, labels,
+                                          dataset.class_weights)
 
         # Set up variable restore using moving averages for better predictions
         if model_config.restore_moving_averages:
@@ -123,10 +124,11 @@ def _eval_once(session, global_step, loss, top_k_op_dict, num_steps,
             losses.append(sess.run(loss))
             steps += 1
             # Print occasional progress if verbose logging on
-            if verbose and steps % 100 == 0:
+            if verbose:
                 percent_done = steps / num_steps * 100.0
                 print("\r>> Evaluating model ({} examples): {:>5.1f}% complete"
-                      .format(num_examples, percent_done), end='')
+                      .format(num_examples, percent_done), end='', flush=True)
+        print()
 
         # Calculate overall precisions and loss for the test set
         precision_dict = {k: num_correct_dict[k] / num_examples for k in
