@@ -72,6 +72,7 @@ class ModelConfig(object):
         self.distort_images = self._get_bool('distort_images')
         self.num_preprocessing_threads = self._get_num(
             'num_preprocessing_threads', int, 1)
+        self.num_readers = self._get_num('num_readers', int, 1)
         self.min_example_fraction = self._get_num(
             'min_example_fraction', float, 0, 1)
         self.data_format = self._get_string('data_format', ['NHWC', 'NCHW'])

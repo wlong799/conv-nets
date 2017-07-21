@@ -40,6 +40,7 @@ class Dataset(metaclass=abc.ABCMeta):
         self._name = name
         self._data_dir = data_dir
         self._overwrite = overwrite
+        self._filename_queue = None
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
 
@@ -159,10 +160,11 @@ class Dataset(metaclass=abc.ABCMeta):
         # Obtain proper queue of filenames and reader for specified phase
         with tf.name_scope('file_preparation'):
             filenames = self._get_records(phase)
-            filename_queue = tf.train.string_input_producer(filenames)
+            self._filename_queue = self._filename_queue or \
+                                   tf.train.string_input_producer(filenames)
             reader = tf.TFRecordReader()
         with tf.name_scope('example_parsing'):
-            _, serialized_example = reader.read(filename_queue)
+            _, serialized_example = reader.read(self._filename_queue)
             features = tf.parse_single_example(serialized_example, features={
                 'image/encoded': tf.FixedLenFeature([], tf.string),
                 'class/label': tf.FixedLenFeature([], tf.int64),
@@ -227,8 +229,8 @@ class ConfigDataset(Dataset):
         self._metadata = self._load_metadata()
 
         if (config_file != self._metadata.config_file or
-                os.path.getmtime(config_file) !=
-                self._metadata.config_last_modified) and \
+                    os.path.getmtime(config_file) !=
+                    self._metadata.config_last_modified) and \
                 not self._overwrite:
             raise RuntimeError("Configuration file has been edited. Overwrite "
                                "must be set to True to recreate datasets.")

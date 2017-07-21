@@ -15,7 +15,7 @@ from .datasets import Dataset
 
 
 def get_minibatch(dataset: Dataset, phase, batch_size, distort_images,
-                  min_example_fraction, num_preprocessing_threads,
+                  min_example_fraction, num_preprocessing_threads, num_readers,
                   data_format):
     """Reads and processes batch of labeled images from TFRecords file.
 
@@ -26,6 +26,7 @@ def get_minibatch(dataset: Dataset, phase, batch_size, distort_images,
         distort_images: bool. Whether to distort images during training phase.
         min_example_fraction: float. Fraction of examples in buffer.
         num_preprocessing_threads: int. Number threads to use for processing.
+        num_readers: int. Number of readers to use in parallel.
         data_format: 'NCHW' or 'NHWC'.
 
     Returns:
@@ -38,24 +39,36 @@ def get_minibatch(dataset: Dataset, phase, batch_size, distort_images,
                     each image in image_batch.
     """
     with tf.name_scope('{}_batch_preprocessing'.format(phase)):
-        image, label, text = dataset.read_example(phase)
+        example_list = [dataset.read_example(phase)
+                        for i in range(num_readers)]
         use_distortions = distort_images and phase == 'train'
-        processed_image = _process_image(image, dataset.image_shape,
-                                         use_distortions)
-
-        tf.summary.image('original', tf.expand_dims(image, 0), 1)
-        tf.summary.image('processed', tf.expand_dims(processed_image, 0), 1)
+        processed_example_list = []
+        for example in example_list:
+            image, label, text = example
+            processed_image = _process_image(image, dataset.image_shape,
+                                             use_distortions)
+            processed_example_list.append((processed_image, label, text))
+        original_images = tf.stack([example[0] for example in example_list])
+        processed_images = tf.stack([example[0] for
+                                     example in processed_example_list])
+        tf.summary.image('original', original_images)
+        tf.summary.image('processed', processed_images)
 
         min_buffer_size = int(dataset.examples_per_epoch(phase) *
                               min_example_fraction)
         safety_buffer_size = num_preprocessing_threads * batch_size
         queue_capacity = min_buffer_size + safety_buffer_size
-        image_batch, label_batch, text_batch = tf.train.shuffle_batch(
-            [processed_image, label, text], batch_size, queue_capacity,
-            min_buffer_size, num_preprocessing_threads)
+        if len(processed_example_list) > 1:
+            image_batch, label_batch, text_batch = tf.train.shuffle_batch_join(
+                processed_example_list, batch_size, queue_capacity,
+                min_buffer_size)
+        else:
+            image_batch, label_batch, text_batch = tf.train.shuffle_batch(
+                processed_example_list[0], batch_size, queue_capacity,
+                min_buffer_size, num_preprocessing_threads)
         if data_format == 'NCHW':
             image_batch = tf.transpose(image_batch, [0, 3, 1, 2])
-        return image_batch, label_batch, text_batch
+    return image_batch, label_batch, text_batch
 
 
 def _process_image(image, image_shape, use_distortions):

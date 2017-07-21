@@ -33,7 +33,7 @@ def evaluate(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
                 dataset, model_config.phase, model_config.batch_size,
                 model_config.distort_images, model_config.min_example_fraction,
                 model_config.num_preprocessing_threads,
-                model_config.data_format)
+                model_config.num_readers, model_config.data_format)
 
         # Run inference and calculate loss
         image_channels = dataset.image_shape[-1]
