@@ -1,26 +1,33 @@
 # coding=utf-8
-"""Selects dataset from specified dataset type."""
+"""Load proper dataset implementation based on its name."""
+# noinspection PyUnresolvedReferences
+from . import implementations
 from .datasets import BasicDataset, ConfigDataset
-from .cifar10_data import CIFAR10Data
-
-# MUST UPDATE THIS DICT TO MAKE NEW DATASET CLASSES AVAILABLE
-CLASS_SELECTION_DICT = {
-    'cifar10': CIFAR10Data
-}
 
 
-def get_dataset(dataset_name, data_dir, overwrite, config=None):
-    """Selects dataset from specified dataset name."""
+def get_dataset(dataset_name, data_dir, overwrite, config):
+    """Selects the subclass of Model with the specified name."""
+    subclasses = []
+    subclasses.extend(BasicDataset.__subclasses__())
+    subclasses.extend(ConfigDataset.__subclasses__())
+    class_selection_dict = {}
+    for cls in subclasses:
+        name = cls.name()
+        if name in class_selection_dict:
+            raise RuntimeError(
+                "Datasets '{}' and '{}' have same name: '{}'".format(
+                    cls.__name__, class_selection_dict[name].__name__, name))
+        class_selection_dict[name] = cls
     try:
-        dataset_class = CLASS_SELECTION_DICT[dataset_name]
+        model_class = class_selection_dict[dataset_name]
     except KeyError as e:
         e.args = e.args or ('',)
-        e.args += ("Dataset '{}' not available.".format(dataset_name))
+        e.args += ("No dataset with name '{}'.".format(dataset_name),)
         raise
-    if issubclass(dataset_class, BasicDataset):
-        return dataset_class(data_dir, overwrite)
-    elif issubclass(dataset_class, ConfigDataset):
-        return dataset_class(data_dir, overwrite, config)
+    if issubclass(model_class, BasicDataset):
+        return model_class(data_dir, overwrite)
+    elif issubclass(model_class, ConfigDataset):
+        return model_class(data_dir, overwrite, config)
     else:
-        raise ValueError(
-            "Dataset '{}' must subclass either BasicDataset or ConfigDataset.")
+        raise RuntimeError("'{}' is not a subclass of BasicDataset or"
+                           "ConfigDataset.".format(model_class.__name__))

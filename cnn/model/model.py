@@ -1,5 +1,6 @@
 # coding=utf-8
-"""Contains Model, an abstract superclass for CNN model architectures"""
+"""Contains abstract superclass for CNN model architectures, as well as a
+method to obtain the appropriate implementation class based on its name."""
 import abc
 from .builder import CNNBuilder
 
@@ -11,10 +12,17 @@ class Model(metaclass=abc.ABCMeta):
     to describe their own unique architectures.
     """
 
-    def __init__(self, name, batch_size, num_classes):
-        self.name = name
-        self.batch_size = batch_size
-        self.num_classes = num_classes
+    def __init__(self, batch_size, num_classes):
+        self._batch_size = batch_size
+        self._num_classes = num_classes
+
+    @staticmethod
+    @abc.abstractmethod
+    def name():
+        """Each Model subclass should have its own unique name. This name
+        will be used to select the appropriate class according to the
+        specified model configuration. """
+        pass
 
     # noinspection PyMethodMayBeStatic
     @abc.abstractmethod

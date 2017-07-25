@@ -1,7 +1,6 @@
 # coding=utf-8
 """CIFAR-10 dataset. 60000 labeled examples of tiny images with 10 classes.
 Described in detail here: http://www.cs.toronto.edu/~kriz/cifar.html"""
-import datetime
 import os
 import shutil
 import struct
@@ -10,8 +9,8 @@ import tarfile
 import numpy as np
 import tensorflow as tf
 
-from . import utils
-from .datasets import BasicDataset
+from cnn.input import utils
+from cnn.input.datasets import BasicDataset
 
 _DATA_URL = 'http://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz'
 _BINARIES_DIR = 'cifar-10-batches-bin'
@@ -24,7 +23,7 @@ _TEST_FILES = ['test_batch.bin']
 # noinspection PyMissingOrEmptyDocstring
 class CIFAR10Data(BasicDataset):
     def __init__(self, data_dir, overwrite):
-        super().__init__('CIFAR-10', data_dir, overwrite)
+        super().__init__(data_dir, overwrite)
         self._binaries_dir = os.path.join(self._data_dir, _BINARIES_DIR)
         self._class_info_filename = os.path.join(self._binaries_dir,
                                                  _CLASS_INFO_FILE)
@@ -36,6 +35,10 @@ class CIFAR10Data(BasicDataset):
             'test': [os.path.join(self._binaries_dir, filename) for
                      filename in _TEST_FILES],
         }
+
+    @staticmethod
+    def name():
+        return 'cifar10'
 
     def _examples_per_epoch(self, phase):
         if phase == 'train':

@@ -27,27 +27,28 @@ class Dataset(metaclass=abc.ABCMeta):
     design pattern used to provide basic structure and error checking for all
     subclasses."""
 
-    def __init__(self, name, data_dir, overwrite):
+    def __init__(self, data_dir, overwrite):
         """Sets up initial configuration of dataset.
 
         Args:
-            name: Name of dataset.
             data_dir: Directory to read/write data.
             overwrite: bool. If True, create_dataset() will recreate all
                        TFRecords files from scratch, even if they already
                        exist.
         """
-        self._name = name
         self._data_dir = data_dir
         self._overwrite = overwrite
         self._filename_queue = None
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
 
-    @property
-    def name(self):
-        """Name of dataset. Used for naming of certain ops."""
-        return self._name
+    @staticmethod
+    @abc.abstractmethod
+    def name():
+        """Each Dataset subclass should have its own unique name. This name
+        will be used to select the appropriate class according to the
+        specified model configuration."""
+        pass
 
     def examples_per_epoch(self, phase):
         """Number of examples in the subset of data for the given phase.
@@ -125,7 +126,7 @@ class Dataset(metaclass=abc.ABCMeta):
         class/label: int64. Label for class of example.
         class/text: bytes. Text label for class of example.
         """
-        with tf.name_scope('{}_dataset_creation'.format(self.name)):
+        with tf.name_scope('{}_dataset_creation'.format(self.name())):
             if self._overwrite:
                 [os.remove(filename) for filename in self._get_all_data_files()
                  if os.path.exists(filename)]
@@ -138,7 +139,7 @@ class Dataset(metaclass=abc.ABCMeta):
                 if not all([os.path.exists(filename) for filename in
                             self._get_all_data_files()]):
                     raise RuntimeError("Not all files were initialized for "
-                                       "dataset '{}'.".format(self.name))
+                                       "dataset '{}'.".format(self.name()))
 
     @abc.abstractmethod
     def _create_dataset(self):
@@ -222,8 +223,8 @@ class ConfigDataset(Dataset):
     subclass will interpret config files in their own way. Information
     should be saved to the metadata object for retrieval in between runs."""
 
-    def __init__(self, name, data_dir, overwrite, config_file):
-        super().__init__(name, data_dir, overwrite)
+    def __init__(self, data_dir, overwrite, config_file):
+        super().__init__(data_dir, overwrite)
         self._config_file = config_file
         self._metadata_file = os.path.join(data_dir, 'metadata.pkl')
         self._metadata = self._load_metadata()

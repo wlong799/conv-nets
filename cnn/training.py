@@ -25,7 +25,7 @@ def train(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
         # Initialize model-wide variables
         global_step = cnn.compat_utils.get_or_create_global_step()
         model = cnn.model.get_model(
-            model_config.model_type, model_config.batch_size,
+            model_config.model_name, model_config.batch_size,
             dataset.num_classes)
         optimizer = _create_optimizer(
             model_config, dataset.examples_per_epoch(model_config.phase),

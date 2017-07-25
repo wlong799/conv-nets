@@ -60,7 +60,7 @@ class ModelConfig(object):
             self.dataset_config = None
         self.overwrite = self._get_bool('overwrite')
 
-        self.model_type = self._get_string('model_type')
+        self.model_name = self._get_string('model_name')
         self.phase = self._get_string('phase', ['train', 'valid', 'test'])
         self.padding_mode = self._get_string('padding_mode', ['SAME', 'VALID'])
 

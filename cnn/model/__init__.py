@@ -3,5 +3,3 @@
 from .builder import CNNBuilder, cnn_variable
 from .model_selection import get_model
 
-
-
