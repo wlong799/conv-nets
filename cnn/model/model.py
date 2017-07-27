@@ -1,16 +1,11 @@
 # coding=utf-8
-"""Contains abstract superclass for CNN model architectures, as well as a
-method to obtain the appropriate implementation class based on its name."""
+"""Abstract superclass for CNN model architectures."""
 import abc
 from .builder import CNNBuilder
 
 
 class Model(metaclass=abc.ABCMeta):
-    """Abstract superclass for all CNN model architectures.
-
-    Classes that subclass model will override its inference method,
-    to describe their own unique architectures.
-    """
+    """Abstract superclass for all CNN model architectures."""
 
     def __init__(self, batch_size, num_classes):
         self._batch_size = batch_size
@@ -18,28 +13,17 @@ class Model(metaclass=abc.ABCMeta):
 
     @staticmethod
     @abc.abstractmethod
-    def name():
+    def get_name():
         """Each Model subclass should have its own unique name. This name
         will be used to select the appropriate class according to the
         specified model configuration. """
         pass
 
-    # noinspection PyMethodMayBeStatic
-    @abc.abstractmethod
     def inference(self, cnn_builder: CNNBuilder):
         """Builds network to perform inference.
 
-        Using CNNBuilder makes it easy to describe the model on a layer by
-        layer basis. CNNBuilder will automatically connect the layers and
-        perform all the background steps of data formatting, activation
-        functions, etc. For instance, the following would be a valid model
-        to specify in inference():
-
-        cnn_builder.convolution(64, 3, 3)
-        cnn_builder.max_pooling(3, 3)
-        cnn_builder.normalization()
-        cnn_builder.reshape([self.batch_size, -1])
-        logits, _ = cnn_builder.affine(self.num_classes)
+        Use CNNBuilder to easily build network layer by layer. Model
+        architecture should be implemented in abstract _inference() method.
 
         Args:
             cnn_builder: CNNBuilder class to use for building the network.
@@ -51,4 +35,9 @@ class Model(metaclass=abc.ABCMeta):
                          should be applied to this layer, as the loss function
                          will perform this step itself.
         """
+        self._inference(cnn_builder)
+        return cnn_builder.top_layer
+
+    @abc.abstractmethod
+    def _inference(self, cnn_builder):
         pass

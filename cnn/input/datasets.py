@@ -44,7 +44,7 @@ class Dataset(metaclass=abc.ABCMeta):
 
     @staticmethod
     @abc.abstractmethod
-    def name():
+    def get_name():
         """Each Dataset subclass should have its own unique name. This name
         will be used to select the appropriate class according to the
         specified model configuration."""
@@ -126,7 +126,7 @@ class Dataset(metaclass=abc.ABCMeta):
         class/label: int64. Label for class of example.
         class/text: bytes. Text label for class of example.
         """
-        with tf.name_scope('{}_dataset_creation'.format(self.name())):
+        with tf.name_scope('{}_dataset_creation'.format(self.get_name())):
             if self._overwrite:
                 [os.remove(filename) for filename in self._get_all_data_files()
                  if os.path.exists(filename)]
@@ -139,7 +139,7 @@ class Dataset(metaclass=abc.ABCMeta):
                 if not all([os.path.exists(filename) for filename in
                             self._get_all_data_files()]):
                     raise RuntimeError("Not all files were initialized for "
-                                       "dataset '{}'.".format(self.name()))
+                                       "dataset '{}'.".format(self.get_name()))
 
     @abc.abstractmethod
     def _create_dataset(self):

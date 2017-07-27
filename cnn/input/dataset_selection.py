@@ -12,7 +12,7 @@ def get_dataset(dataset_name, data_dir, overwrite, config):
     subclasses.extend(ConfigDataset.__subclasses__())
     class_selection_dict = {}
     for cls in subclasses:
-        name = cls.name()
+        name = cls.get_name()
         if name in class_selection_dict:
             raise RuntimeError(
                 "Datasets '{}' and '{}' have same name: '{}'".format(

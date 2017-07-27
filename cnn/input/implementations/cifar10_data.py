@@ -37,7 +37,7 @@ class CIFAR10Data(BasicDataset):
         }
 
     @staticmethod
-    def name():
+    def get_name():
         return 'cifar10'
 
     def _examples_per_epoch(self, phase):

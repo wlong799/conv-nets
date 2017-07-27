@@ -36,12 +36,11 @@ def evaluate(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
                 model_config.num_readers, model_config.data_format)
 
         # Run inference and calculate loss
-        image_channels = dataset.image_shape[-1]
-        is_train_phase = False
+        is_training = False
         builder = cnn.model.CNNBuilder(
-            images, image_channels, is_train_phase,
+            images, is_training, model_config.use_batch_norm,
             model_config.weight_decay_rate, model_config.padding_mode,
-            model_config.data_format, model_config.data_type)
+            model_config.data_format)
         logits = model.inference(builder)
         loss = cnn.losses.calc_total_loss(logits, labels,
                                           dataset.class_weights)

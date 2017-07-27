@@ -62,6 +62,7 @@ class ModelConfig(object):
 
         self.model_name = self._get_string('model_name')
         self.phase = self._get_string('phase', ['train', 'valid', 'test'])
+        self.use_batch_norm = self._get_bool('use_batch_norm')
         self.padding_mode = self._get_string('padding_mode', ['SAME', 'VALID'])
 
         self.data_dir = self._get_string('data_dir')
@@ -75,22 +76,15 @@ class ModelConfig(object):
         self.num_readers = self._get_num('num_readers', int, 1)
         self.min_example_fraction = self._get_num(
             'min_example_fraction', float, 0, 1)
-        self.data_format = self._get_string('data_format', ['NHWC', 'NCHW'])
-        data_type_str = self._get_string(
-            'data_type', ['float16', 'float32', 'float64'])
-        self.data_type = data_type_str == 'float16' and tf.float16 or \
-                         data_type_str == 'float32' and tf.float32 or \
-                         data_type_str == 'float64' and tf.float64
 
         self.num_gpus = self._get_num('num_gpus', int, 0)
+        self.data_format = 'NCHW' if self.num_gpus else 'NHWC'
 
         self.init_learning_rate = self._get_num('init_learning_rate', float, 0)
         self.learning_decay_rate = self._get_num('learning_decay_rate',
                                                  float, 0, 1)
         self.epochs_per_decay = self._get_num('epochs_per_decay', int, 1)
-        use_weight_decay = self._get_bool('use_weight_decay')
-        weight_decay_rate = self._get_num('weight_decay_rate', float, 0)
-        self.weight_decay_rate = use_weight_decay and weight_decay_rate or 0.0
+        self.weight_decay_rate = self._get_num('weight_decay_rate', float, 0)
         self.moving_avg_decay_rate = self._get_num('moving_avg_decay_rate',
                                                    float, 0, 1)
 

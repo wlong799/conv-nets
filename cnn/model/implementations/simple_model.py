@@ -11,21 +11,21 @@ class SimpleModel(Model):
         super().__init__(batch_size, num_classes)
 
     @staticmethod
-    def name():
+    def get_name():
         return 'simple'
 
-    def inference(self, cnn_builder: CNNBuilder):
-        """Simple CNN with convolution, pooling, and normalization."""
-        cnn_builder.convolution(64, 3, 3)
-        cnn_builder.convolution(64, 3, 3)
-        cnn_builder.normalization()
-        cnn_builder.max_pooling(3, 3)
-        cnn_builder.convolution(128, 5, 5)
-        cnn_builder.normalization()
-        cnn_builder.max_pooling(3, 3)
-        cnn_builder.reshape([self._batch_size, -1])
-        cnn_builder.affine(512)
-        cnn_builder.affine(256)
-        logits, _ = cnn_builder.affine(self._num_classes,
-                                       activation_method=None)
-        return logits
+    def _inference(self, cnn_builder: CNNBuilder):
+        """Simple CNN with convolution, pooling, and fully connected layers."""
+        if not (cnn_builder.padding_mode == 'SAME' and
+                    cnn_builder.use_batch_norm):
+            raise ValueError(
+                "Model '{}' must be run with padding mode 'SAME' "
+                "and batch normalization on.".format(self.get_name()))
+        cnn_builder.convolution(64, 3)
+        cnn_builder.convolution(64, 3)
+        cnn_builder.max_pooling(3)
+        cnn_builder.convolution(128, 5)
+        cnn_builder.max_pooling(3)
+        cnn_builder.dense(512)
+        cnn_builder.dense(256)
+        cnn_builder.dense(10, None)

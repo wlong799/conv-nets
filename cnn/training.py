@@ -16,11 +16,8 @@ def train(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
     step. Logging, checkpoint saving, and TensorBoard visualizations are
     created using a monitored session.
     """
-    # Determine devices to use for inference.
-    devices = _get_devices(model_config.num_gpus)
+    devices, device_names = _get_devices(model_config.num_gpus)
     num_devices = len(devices)
-    device_names = ['_'.join(device[1:].split(':')).upper() for
-                    device in devices]  # /cpu:0 -> CPU_0, /gpu:1 -> GPU_1, etc
     with tf.Graph().as_default(), tf.device('/cpu:0'):
         # Initialize model-wide variables
         global_step = cnn.compat_utils.get_or_create_global_step()
@@ -40,20 +37,17 @@ def train(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
                 model_config.num_readers, model_config.data_format)
             prefetch_queue = _create_queue([images, labels], 2 * num_devices,
                                            'prefetch_queue')
-
         # Run inference for a batch on each available device in parallel
         device_gradients = []
         total_losses = []
         with tf.variable_scope(tf.get_variable_scope()):
-            image_channels = dataset.image_shape[-1]
-            is_train_phase = True
+            is_training = True
             for device, device_name in zip(devices, device_names):
                 images, labels = prefetch_queue.dequeue()
                 cnn_builder = cnn.model.CNNBuilder(
-                    images, image_channels, is_train_phase,
+                    images, is_training, model_config.use_batch_norm,
                     model_config.weight_decay_rate,
-                    model_config.padding_mode, model_config.data_format,
-                    model_config.data_type)
+                    model_config.padding_mode, model_config.data_format)
                 # Place only computationally expensive inference step on device
                 with tf.device(device), tf.name_scope(device_name) as scope:
                     logits = model.inference(cnn_builder)
@@ -85,7 +79,8 @@ def train(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
             variable_averages_op = variable_averages.apply(
                 tf.trainable_variables())
 
-        train_op = tf.group(apply_grad_op, variable_averages_op)
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        train_op = tf.group(apply_grad_op, variable_averages_op, *update_ops)
         with cnn.monitor.create_training_session(model_config, total_loss,
                                                  global_step) as mon_sess:
             while not mon_sess.should_stop():
@@ -93,11 +88,15 @@ def train(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
 
 
 def _get_devices(num_gpus):
-    """Determine devices that will be used for inference."""
+    """Determine devices that will be used for inference, and give them
+    appropriate names for TensorBoard (e.g. /cpu:0 -> CPU_0). """
     if num_gpus == 0:
-        return ['/cpu:0']
+        devices = ['/cpu:0']
     else:
-        return ['/gpu:{}'.format(i) for i in range(num_gpus)]
+        devices = ['/gpu:{}'.format(i) for i in range(num_gpus)]
+    device_names = ['_'.join(device[1:].split(':')).upper() for
+                    device in devices]
+    return devices, device_names
 
 
 def _create_optimizer(model_config, examples_per_epoch, global_step):
@@ -145,7 +144,8 @@ def _calc_average_gradients(device_grads):
 def _add_loss_summaries(device_names):
     """Averages losses across all devices and adds summary for each."""
     with tf.name_scope('loss_summary'):
-        average_losses = _average_values_across_devices('losses', device_names)
+        average_losses = _average_values_across_devices(
+            tf.GraphKeys.LOSSES, device_names)
         average_total_loss = tf.reduce_sum(average_losses,
                                            name='losses/total_loss')
     for loss in average_losses + [average_total_loss]:
@@ -158,8 +158,8 @@ def _add_activation_summaries(device_names):
     both a scalar summary of its sparsity, and an overall histogram summary."""
     # Use name scope for calculation ops for cleaner graph view
     with tf.name_scope('activation_summary'):
-        average_activations = _average_values_across_devices('activations',
-                                                             device_names)
+        average_activations = _average_values_across_devices(
+            tf.GraphKeys.ACTIVATIONS, device_names)
         sparsities = [tf.nn.zero_fraction(activation) for
                       activation in average_activations]
     # Add summaries, with names stripped of prefix for cleaner summary view
