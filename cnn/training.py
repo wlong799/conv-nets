@@ -10,11 +10,11 @@ import cnn
 def train(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
     """Trains a neural network with the specified configuration.
 
-    Model trains a neural network. Preprocessing and all variable storage
-    occurs on the CPU. If GPUs are available, then inference will run in
-    parallel across all GPUs, and average gradients will be computed for each
-    step. Logging, checkpoint saving, and TensorBoard visualizations are
-    created using a monitored session.
+    Model trains a neural network. Preprocessing occurs on the CPU for
+    improved performance. If GPUs are available, then inference will run in
+    parallel across all GPUs, and average gradients will be computed for
+    each step. Logging, checkpoint saving, and TensorBoard visualizations
+    are created using a monitored session.
     """
     devices, device_names = _get_devices(model_config.num_gpus)
     num_devices = len(devices)
@@ -51,18 +51,16 @@ def train(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
                 # Place only computationally expensive inference step on device
                 with tf.device(device), tf.name_scope(device_name) as scope:
                     logits = model.inference(cnn_builder)
-                    total_loss = cnn.losses.calc_total_loss(
+                    total_loss = cnn.model.losses.calc_total_loss(
                         logits, labels, dataset.class_weights, scope)
                     gradients = optimizer.compute_gradients(total_loss)
                     tf.get_variable_scope().reuse_variables()
                     device_gradients.append(gradients)
                     total_losses.append(total_loss)
 
-        # Average gradients across all devices and apply to variables
         gradients = _calc_average_gradients(device_gradients)
         apply_grad_op = optimizer.apply_gradients(gradients, global_step)
 
-        # Add summaries
         _add_loss_summaries(device_names)
         _add_activation_summaries(device_names)
         total_loss = tf.reduce_mean(total_losses, name='total_loss')
@@ -72,13 +70,12 @@ def train(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
                 tf.summary.histogram('{}/gradients'.format(var.op.name), grad)
 
         # Track variable moving averages for better predictions
-        with tf.name_scope('moving_avg'):
-            variable_averages = tf.train.ExponentialMovingAverage(
-                model_config.moving_avg_decay_rate, global_step,
-                name='moving_avg')
-            variable_averages_op = variable_averages.apply(
-                tf.trainable_variables())
+        variable_averages = tf.train.ExponentialMovingAverage(
+            model_config.moving_avg_decay_rate, global_step)
+        variable_averages_op = variable_averages.apply(
+            tf.trainable_variables())
 
+        # update_ops necessary for batch normalization to function
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         train_op = tf.group(apply_grad_op, variable_averages_op, *update_ops)
         with cnn.monitor.create_training_session(model_config, total_loss,
@@ -100,7 +97,8 @@ def _get_devices(num_gpus):
 
 
 def _create_optimizer(model_config, examples_per_epoch, global_step):
-    """Creates exponentially decaying optimizer for training model."""
+    """Creates gradient descent optimizer with momentum and learning rate
+    decay. """
     steps_per_decay = int(examples_per_epoch *
                           model_config.epochs_per_decay /
                           model_config.batch_size)
@@ -108,8 +106,8 @@ def _create_optimizer(model_config, examples_per_epoch, global_step):
         model_config.init_learning_rate, global_step, steps_per_decay,
         model_config.learning_decay_rate, True, 'learning_rate')
     tf.summary.scalar(learning_rate.op.name, learning_rate)
-    # TODO: Look into using other optimizer types
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+    optimizer = tf.train.MomentumOptimizer(learning_rate,
+                                           model_config.momentum)
     return optimizer
 
 

@@ -13,42 +13,37 @@ def evaluate(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
     """Evaluates accuracy of model.
 
     Restores variables from the most recent checkpoint file available,
-    using their moving averages (unless specified not to in the model
-    configuration) to obtain better predictions. Outputs the percentage of
-    target labels in the test set that are within the top k predictions of
-    the model, for various values of k specified in the configuration file.
-    Validation phase can run repeatedly in background if specified, to aid
-    monitoring of training sessions.
+    using their moving averages to obtain better predictions. Outputs the
+    percentage of target labels in the test set that are within the top k
+    predictions of the model.  Validation phase can run repeatedly in
+    background if specified, to aid monitoring of training sessions.
     """
-    with tf.Graph().as_default():
-        # Set up model
+    with tf.Graph().as_default(), tf.device('/cpu:0'):
         global_step = cnn.compat_utils.get_or_create_global_step()
         model = cnn.model.get_model(model_config.model_name,
                                     model_config.batch_size,
                                     dataset.num_classes)
 
-        # Preprocess on CPU for improved performance
-        with tf.device('/cpu:0'):
-            images, labels, _ = cnn.input.get_minibatch(
-                dataset, model_config.phase, model_config.batch_size,
-                model_config.distort_images, model_config.min_example_fraction,
-                model_config.num_preprocessing_threads,
-                model_config.num_readers, model_config.data_format)
+        images, labels, _ = cnn.input.get_minibatch(
+            dataset, model_config.phase, model_config.batch_size,
+            model_config.distort_images, model_config.min_example_fraction,
+            model_config.num_preprocessing_threads,
+            model_config.num_readers, model_config.data_format)
 
-        # Run inference and calculate loss
-        is_training = False
-        builder = cnn.model.CNNBuilder(
-            images, is_training, model_config.use_batch_norm,
-            model_config.weight_decay_rate, model_config.padding_mode,
-            model_config.data_format)
-        logits = model.inference(builder)
-        loss = cnn.losses.calc_total_loss(logits, labels,
-                                          dataset.class_weights)
+        device = '/gpu:0' if model_config.num_gpus > 0 else '/cpu:0'
+        with tf.device(device):
+            is_training = False
+            builder = cnn.model.CNNBuilder(
+                images, is_training, model_config.use_batch_norm,
+                model_config.weight_decay_rate, model_config.padding_mode,
+                model_config.data_format)
+            logits = model.inference(builder)
+            loss = cnn.model.losses.calc_total_loss(logits, labels,
+                                                    dataset.class_weights)
 
         # Set up variable restore using moving averages for better predictions
         variable_averages = tf.train.ExponentialMovingAverage(
-            model_config.moving_avg_decay_rate, global_step,
-            name='moving_avg')
+            model_config.moving_avg_decay_rate, global_step)
         saver = tf.train.Saver(variable_averages.variables_to_restore())
 
         # Set up in_top_k testing for each specified value of k
@@ -68,21 +63,19 @@ def evaluate(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
         # Either run evaluation once, or repeatedly in background
         if (model_config.phase == 'test' or
                     model_config.bg_valid_repeat_secs == 0):
-            # Don't run evaluation if no checkpoint has been created yet
             if tf.train.latest_checkpoint(
                     model_config.checkpoints_dir) is not None:
-                session = cnn.monitor.create_testing_session(
-                    model_config, saver)
+                session = cnn.monitor.create_testing_session(model_config,
+                                                             saver)
                 _eval_once(session, global_step, loss, top_k_op_dict,
                            num_steps, num_examples, verbose=True,
                            save_summaries=(model_config.phase == 'valid'))
         else:
             while True:
-                # Only run if a checkpoint is available to load from
                 if tf.train.latest_checkpoint(
                         model_config.checkpoints_dir) is not None:
-                    session = cnn.monitor.create_testing_session(
-                        model_config, saver)
+                    session = cnn.monitor.create_testing_session(model_config,
+                                                                 saver)
                     _eval_once(session, global_step, loss, top_k_op_dict,
                                num_steps, num_examples, verbose=False,
                                save_summaries=True)

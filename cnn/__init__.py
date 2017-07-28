@@ -6,7 +6,6 @@ import cnn.model
 
 import cnn.cnn_app
 import cnn.compat_utils
-import cnn.losses
 import cnn.testing
 import cnn.monitor
 import cnn.training

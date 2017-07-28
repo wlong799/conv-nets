@@ -46,6 +46,14 @@ class CNNBuilder(object):
     def top_layer(self):
         return self._top_layer
 
+    @top_layer.setter
+    def top_layer(self, layer):
+        """As CNNBuilder automatically updates its top layer as the methods
+        are called, this should only be used in case a custom layer has been
+        created without CNNBuilder methods, and needs to be added to the
+        model. """
+        self._top_layer = layer
+
     @property
     def is_training(self):
         return self._is_training
@@ -62,19 +70,6 @@ class CNNBuilder(object):
     def padding_mode(self):
         return self._padding_mode
 
-    def update_top_layer(self, layer):
-        """Adds custom layer to model.
-
-        In case a custom layer needs to be created (i.e. without using a
-        CNNBuilder method), it is necessary to add the new layer to the model
-        using this method, so the CNNBuilder can continue to properly track
-        the current top layer of the model.
-
-        Args:
-            layer: Tensor output of new layer to add to model.
-        """
-        self._top_layer = layer
-
     def average_pooling(self, pool_size, strides=1, padding_mode=None):
         """Adds average pooling layer to network.
 
@@ -85,7 +80,7 @@ class CNNBuilder(object):
             strides: int or (int, int). Vertical and horizontal stride of
                      pooling window. Single integer indicates strides in both
                      dimensions are of same size.
-            padding_mode: 'SAME' or 'VALID'. Padding mode to use. None to use
+            padding_mode: 'same' or 'valid'. Padding mode to use. None to use
                           CNNBuilder object's default.
         """
         name = self._get_layer_name('avgpool')
@@ -106,8 +101,8 @@ class CNNBuilder(object):
         self._top_layer = batch_norm
 
     def convolution(self, num_filters, kernel_size, strides=1,
-                    activation_method='relu', padding_mode=None,
-                    use_batch_norm=None):
+                    activation_method='relu', use_batch_norm=None,
+                    padding_mode=None):
         """Adds a convolutional layer to network.
 
         Args:
@@ -120,11 +115,11 @@ class CNNBuilder(object):
                      both dimensions are of same size.
             activation_method: string. Specifies which of the available
                                activations in _get_activation_func() to use.
-            padding_mode: 'SAME' or 'VALID'. Padding mode to use. None to use
-                          CNNBuilder object's default.
             use_batch_norm: bool. Whether batch normalization should be
                             applied to this layer. None to use CNNBuilder
                             object's default.
+            padding_mode: 'SAME' or 'VALID'. Padding mode to use. None to use
+                          CNNBuilder object's default.
         """
         name = self._get_layer_name('conv')
         with tf.variable_scope(name):
