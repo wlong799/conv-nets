@@ -24,7 +24,7 @@ class ModelConfig(object):
         Configuration parameters are loaded first from the default file,
         then from user specified file (if available), and then from any
         passed keyword arguments. Look at defaults.ini for an example
-        configuration file setup,to see documentation on the configuration
+        configuration file setup, to see documentation on the configuration
         parameters available, and to see the default values for each parameter.
 
         Args:
@@ -36,34 +36,31 @@ class ModelConfig(object):
                       Arguments must be strings, to be compatible with
                       settings from configuration files.
         """
-        # Load all available parameters to an initial dictionary
         self._config_dict = {}
-        self._load_config(DEFAULT_CONFIG_FILE, DEFAULT_CONFIG_SECTION)
+        self._load_config_to_dict(DEFAULT_CONFIG_FILE, DEFAULT_CONFIG_SECTION)
         if custom_config_file:
-            custom_config_section = custom_config_section or \
-                                    DEFAULT_CONFIG_SECTION
-            self._load_config(custom_config_file, custom_config_section)
-        # Initial dictionary expects key and value pairs both to be strings
-        for key in kwargs:
-            val = kwargs[key]
-            if not isinstance(val, str):
-                raise ValueError("Keyword arguments must be passed as strings."
-                                 " Error with key '{}'".format(key))
-            self._config_dict[key] = val
+            custom_config_section = (custom_config_section or
+                                     DEFAULT_CONFIG_SECTION)
+            self._load_config_to_dict(custom_config_file,
+                                      custom_config_section)
 
-        # Check parameter validity and convert to appropriate type
+        for config_key, config_val in kwargs.items():
+            if not isinstance(config_val, str):
+                raise ValueError("Keyword arguments must be passed as strings."
+                                 " Error with key '{}'".format(config_key))
+            self._config_dict[config_key] = config_val
+
         self.dataset_name = self._get_string('dataset_name')
-        use_dataset_config = self._get_bool('use_dataset_config')
-        if use_dataset_config:
+        try:
             self.dataset_config = self._get_string('dataset_config')
-        else:
+        except ValueError:
             self.dataset_config = None
         self.overwrite = self._get_bool('overwrite')
 
         self.model_name = self._get_string('model_name')
         self.phase = self._get_string('phase', ['train', 'valid', 'test'])
         self.use_batch_norm = self._get_bool('use_batch_norm')
-        self.padding_mode = self._get_string('padding_mode', ['SAME', 'VALID'])
+        self.padding_mode = self._get_string('padding_mode', ['same', 'valid'])
 
         self.data_dir = self._get_string('data_dir')
         self.checkpoints_dir = self._get_string('checkpoints_dir')
@@ -95,8 +92,6 @@ class ModelConfig(object):
             self._config_dict['top_k_tests_split'] = str_val
             top_k_tests.append(self._get_num('top_k_tests_split', int, 1))
         self.top_k_tests = top_k_tests
-        self.restore_moving_averages = self._get_bool(
-            'restore_moving_averages')
         self.bg_valid_set_fraction = self._get_num(
             'bg_valid_set_fraction', float, 0, 1)
         self.bg_valid_repeat_secs = self._get_num(
@@ -109,7 +104,7 @@ class ModelConfig(object):
         self.save_summaries_steps = self._get_num(
             'save_summaries_steps', int, 0)
 
-    def _load_config(self, config_file, config_section):
+    def _load_config_to_dict(self, config_file, config_section):
         """Loads settings from configuration file."""
         config = configparser.ConfigParser(allow_no_value=True,
                                            inline_comment_prefixes='#')
@@ -120,7 +115,7 @@ class ModelConfig(object):
         self._config_dict.update(config[config_section])
 
     def _assert_key(self, key):
-        """Quick check that key and associated value actually exist."""
+        """Check that key and associated value actually exist."""
         if key not in self._config_dict or self._config_dict[key] is None:
             raise ValueError("Setting '{}' was not specified".format(key))
 

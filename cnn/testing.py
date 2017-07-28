@@ -46,13 +46,10 @@ def evaluate(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
                                           dataset.class_weights)
 
         # Set up variable restore using moving averages for better predictions
-        if model_config.restore_moving_averages:
-            variable_averages = tf.train.ExponentialMovingAverage(
-                model_config.moving_avg_decay_rate, global_step,
-                name='moving_avg')
-            saver = tf.train.Saver(variable_averages.variables_to_restore())
-        else:
-            saver = None
+        variable_averages = tf.train.ExponentialMovingAverage(
+            model_config.moving_avg_decay_rate, global_step,
+            name='moving_avg')
+        saver = tf.train.Saver(variable_averages.variables_to_restore())
 
         # Set up in_top_k testing for each specified value of k
         top_k_op_dict = {k: tf.nn.in_top_k(logits, labels, k) for k in
@@ -127,7 +124,8 @@ def _eval_once(session, global_step, loss, top_k_op_dict, num_steps,
                 percent_done = steps / num_steps * 100.0
                 print("\r>> Evaluating model ({} examples): {:>5.1f}% complete"
                       .format(num_examples, percent_done), end='', flush=True)
-        print()
+        if verbose:
+            print()
 
         # Calculate overall precisions and loss for the test set
         precision_dict = {k: num_correct_dict[k] / num_examples for k in

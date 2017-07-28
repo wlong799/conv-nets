@@ -16,7 +16,7 @@ class SimpleModel(Model):
 
     def _inference(self, cnn_builder: CNNBuilder):
         """Simple CNN with convolution, pooling, and fully connected layers."""
-        if not (cnn_builder.padding_mode == 'SAME' and
+        if not (cnn_builder.padding_mode == 'same' and
                     cnn_builder.use_batch_norm):
             raise ValueError(
                 "Model '{}' must be run with padding mode 'SAME' "
