@@ -227,7 +227,8 @@ class CNNBuilder(object):
             return None
 
         def _weight_decay(tensor):
-            return tf.multiply(tf.nn.l2_loss(tensor), self._weight_decay_rate)
+            return tf.multiply(tf.nn.l2_loss(tensor), self._weight_decay_rate,
+                               name='weight_decay')
 
         return _weight_decay
 
@@ -236,7 +237,7 @@ class CNNBuilder(object):
         method = method or 'linear'
 
         def _linear(tensor):
-            return tf.multiply(tensor, 1, 'linear')
+            return tf.identity(tensor, 'linear')
 
         activation_dict = {
             'linear': _linear,

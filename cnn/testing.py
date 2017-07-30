@@ -15,9 +15,13 @@ def evaluate(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
     Restores variables from the most recent checkpoint file available,
     using their moving averages to obtain better predictions. Outputs the
     percentage of target labels in the test set that are within the top k
-    predictions of the model.  Validation phase can run repeatedly in
+    predictions of the model. Validation phase can run repeatedly in
     background if specified, to aid monitoring of training sessions.
     """
+    if tf.train.latest_checkpoint(model_config.checkpoints_dir) is None:
+        raise RuntimeError("No checkpoints located in '{}'. Cannot run "
+                           "evaluation.".format(model_config.checkpoints_dir))
+    # Running preprocessing steps on CPU increases performance
     with tf.Graph().as_default(), tf.device('/cpu:0'):
         global_step = cnn.compat_utils.get_or_create_global_step()
         model = cnn.model.get_model(model_config.model_name,
@@ -30,7 +34,9 @@ def evaluate(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
             model_config.num_preprocessing_threads,
             model_config.num_readers, model_config.data_format)
 
+        # Utilize GPU if available for intensive inference step
         device = '/gpu:0' if model_config.num_gpus > 0 else '/cpu:0'
+        device_name = 'gpu_0' if model_config.num_gpus > 0 else 'cpu_0'
         with tf.device(device):
             is_training = False
             builder = cnn.model.CNNBuilder(
@@ -38,47 +44,37 @@ def evaluate(model_config: cnn.config.ModelConfig, dataset: cnn.input.Dataset):
                 model_config.weight_decay_rate, model_config.padding_mode,
                 model_config.data_format)
             logits = model.inference(builder)
-            loss = cnn.model.losses.calc_total_loss(logits, labels,
-                                                    dataset.class_weights)
+            total_loss = cnn.model.calc_total_loss(
+                logits, labels, dataset.class_weights, device_name)
 
-        # Set up variable restore using moving averages for better predictions
+        # Restore from moving averages for better predictions
         variable_averages = tf.train.ExponentialMovingAverage(
             model_config.moving_avg_decay_rate, global_step)
         saver = tf.train.Saver(variable_averages.variables_to_restore())
 
-        # Set up in_top_k testing for each specified value of k
+        total_examples = dataset.examples_per_epoch(model_config.phase)
+        if model_config.phase == 'valid':
+            total_examples = int(total_examples *
+                                 model_config.bg_valid_set_fraction)
+        num_steps = int(total_examples / model_config.batch_size)
+        num_examples = num_steps * model_config.batch_size
+
         top_k_op_dict = {k: tf.nn.in_top_k(logits, labels, k) for k in
                          model_config.top_k_tests}
 
-        # Determine number of examples to run
-        if model_config.phase == 'valid':
-            num_steps = int(dataset.examples_per_epoch(model_config.phase) *
-                            model_config.bg_valid_set_fraction /
-                            model_config.batch_size)
-        else:
-            num_steps = int(dataset.examples_per_epoch(model_config.phase) /
-                            model_config.batch_size)
-        num_examples = num_steps * model_config.batch_size
-
-        # Either run evaluation once, or repeatedly in background
         if (model_config.phase == 'test' or
                     model_config.bg_valid_repeat_secs == 0):
-            if tf.train.latest_checkpoint(
-                    model_config.checkpoints_dir) is not None:
-                session = cnn.monitor.create_testing_session(model_config,
-                                                             saver)
-                _eval_once(session, global_step, loss, top_k_op_dict,
-                           num_steps, num_examples, verbose=True,
-                           save_summaries=(model_config.phase == 'valid'))
+            session = cnn.monitor.create_testing_session(model_config, saver)
+            _eval_once(session, global_step, total_loss, top_k_op_dict,
+                       num_steps, num_examples, verbose=True,
+                       save_summaries=(model_config.phase == 'valid'))
         else:
             while True:
-                if tf.train.latest_checkpoint(
-                        model_config.checkpoints_dir) is not None:
-                    session = cnn.monitor.create_testing_session(model_config,
-                                                                 saver)
-                    _eval_once(session, global_step, loss, top_k_op_dict,
-                               num_steps, num_examples, verbose=False,
-                               save_summaries=True)
+                session = cnn.monitor.create_testing_session(model_config,
+                                                             saver)
+                _eval_once(session, global_step, total_loss, top_k_op_dict,
+                           num_steps, num_examples, verbose=False,
+                           save_summaries=True)
                 time.sleep(model_config.bg_valid_repeat_secs)
 
 
@@ -97,22 +93,21 @@ def _eval_once(session, global_step, loss, top_k_op_dict, num_steps,
         verbose: Whether progress should be logged during evaluation.
         save_summaries: Whether summaries should be saved to TensorBoard.
     """
-    top_k_tests = sorted([key for key in top_k_op_dict])
-    num_correct_dict = {k: 0 for k in top_k_tests}
+    sorted_k = sorted([key for key in top_k_op_dict])
+    num_correct_dict = {k: 0 for k in sorted_k}
     losses = []
     steps = 0
     with session as sess:
         global_step_value = sess.run(global_step)
-        # Get number correct in top k, and loss for each batch
         while steps < num_steps:
-            run_correct_dict = dict(zip(
-                top_k_tests,
-                sess.run([top_k_op_dict[k] for k in top_k_tests])))
-            for k in run_correct_dict:
-                num_correct_dict[k] += np.sum(run_correct_dict[k])
+            in_top_k_dict = dict(zip(
+                sorted_k,
+                sess.run([top_k_op_dict[k] for k in sorted_k])))
+            for k in in_top_k_dict:
+                num_correct_dict[k] += np.sum(in_top_k_dict[k])
             losses.append(sess.run(loss))
+
             steps += 1
-            # Print occasional progress if verbose logging on
             if verbose:
                 percent_done = steps / num_steps * 100.0
                 print("\r>> Evaluating model ({} examples): {:>5.1f}% complete"
@@ -120,20 +115,20 @@ def _eval_once(session, global_step, loss, top_k_op_dict, num_steps,
         if verbose:
             print()
 
-        # Calculate overall precisions and loss for the test set
         precision_dict = {k: num_correct_dict[k] / num_examples for k in
                           num_correct_dict}
         avg_loss = sum(losses) / len(losses)
-        # Write results to terminal and save to TensorBoard
+
         summary = tf.Summary()
         summary.value.add(tag='validation/total_loss', simple_value=avg_loss)
-        log = "{}: step {} | Loss = {:.2f}".format(
-            datetime.datetime.now(), global_step_value, avg_loss)
-        for k in precision_dict:
-            log += " | % in Top {:>2} = {:>4.1f}".format(
-                k, precision_dict[k] * 100)
+        for k in sorted_k:
             summary.value.add(tag='validation/top_{}_precision'.format(k),
                               simple_value=precision_dict[k])
+        log = "{}: step {} | Loss = {:.2f}".format(
+            datetime.datetime.now(), global_step_value, avg_loss)
+        for k in sorted_k:
+            log += " | % in Top {:>2} = {:>4.1f}".format(
+                k, precision_dict[k] * 100)
         print(log)
         summary_writer = tf.summary.FileWriter('logs/')
         if save_summaries:
