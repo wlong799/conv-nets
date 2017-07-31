@@ -128,5 +128,5 @@ class CIFAR10Data(BasicDataset):
         if not os.path.exists(self._class_info_filename):
             return None
         with open(self._class_info_filename) as metadata_file:
-            metadata = [line for line in metadata_file]
+            metadata = [line.strip('\n') for line in metadata_file]
         return metadata
