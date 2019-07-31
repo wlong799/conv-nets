@@ -1,2 +1,4 @@
 # Deep Learning Practice
-## Will Long
+Will Long
+
+Implementation of deep convolutional networks using TensorFlow
